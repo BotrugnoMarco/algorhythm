@@ -190,8 +190,11 @@ def classify_tracks():
         # Se usiamo st.button con key fissa, esso ritorna True solo per un ciclo.
         # Memorizziamo lo stato in is_running.
         if start_btn.button("▶️ Avvia Classificazione AI", key="start_ai"):
-            st.session_state["is_running"] = True
-            st.rerun()  # Riavvia lo script per far sparire il bottone Avvia e mostrare lo Stop e il loop
+            if not tracks:
+                st.error("Nessuna traccia trovata! Assicurati di aver fatto il fetch.")
+            else:
+                st.session_state["is_running"] = True
+                st.rerun()  # Riavvia lo script per far sparire il bottone Avvia e mostrare lo Stop e il loop
 
     else:
         # Bottone STOP (solo se sta girando)
@@ -247,12 +250,16 @@ def classify_tracks():
                 st.session_state["classifications"] = classifications
                 
         except Exception as e:
-
-            st.error(f"Errore: {e}")
+            st.error(f"Errore durante classificazione AI: {e}")
             st.session_state["is_running"] = False
         
-        if "classifications" in st.session_state and st.session_state["classifications"]:
-            st.rerun()
+        # Se il loop è finito senza errori e senza stop manuale, significa che abbiamo finito tutto
+        if st.session_state["is_running"]:
+             st.session_state["is_running"] = False
+             st.success("Analisi completata!")
+        
+        # Rerun per aggiornare la view finale (mostrare bottone Crea Playlist)
+        st.rerun()
 
     # Se abbiamo risultati (parziali o totali), costruiamo i bucket
     if "classifications" in st.session_state and st.session_state["classifications"]:
