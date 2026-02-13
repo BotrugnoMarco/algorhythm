@@ -176,17 +176,11 @@ def classify_tracks():
     # ── Classificazione AI ──
     st.subheader("🤖 Classificazione AI con Gemini")
     
-    stop_btn = st.button("🛑 Stop Classificazione", key="stop_ai")
-    
-    ai_status = st.empty()
-    ai_progress = st.progress(0, text="Avvio classificazione...")
-    results_container = st.expander("Dettaglio Classificazione (Live)", expanded=True)
-    
-    classifications = {}
-    
     # Bottoni di controllo
     start_btn = st.empty()
     stop_btn = st.empty()
+    
+    classifications = {}
     
     # Stato di esecuzione
     if "is_running" not in st.session_state:
