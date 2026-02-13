@@ -5,6 +5,7 @@ Entry-point Streamlit: autenticazione, processing e dashboard.
 Avvia con:  streamlit run app.py
 """
 
+import os  # Necessario per leggere variabili d'ambiente
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -394,11 +395,42 @@ def show_dashboard():
     st.caption("Fatto con ❤️ da AlgoRhythm · Powered by Spotify API & Google Gemini")
 
 
+def check_access_password():
+    """Mostra una schermata di login che chiede una KEY di accesso."""
+    
+    # Se la chiave è già validata in sessione, continua
+    if st.session_state.get("access_granted", False):
+        return
+
+    # Leggi la chiave segreta (definita in .env o configurazione server)
+    # Se non è impostata, lasciamo l'accesso libero (opzionale)
+    ACCESS_KEY = os.getenv("APP_ACCESS_KEY")
+    if not ACCESS_KEY:
+        st.session_state["access_granted"] = True
+        return
+
+    st.markdown('<div class="main-header"><h2>🔒 Accesso Riservato</h2></div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        password = st.text_input("Inserisci la Chiave di Accesso:", type="password")
+        if st.button("Entra", type="primary", use_container_width=True):
+            if password == ACCESS_KEY:
+                st.session_state["access_granted"] = True
+                st.rerun()
+            else:
+                st.error("Chiave errata! Riprova.")
+    
+    st.stop()  # Blocca l'esecuzione finché non si inserisce la pw corretta
+
 # ══════════════════════════════════════════════════════════════════════
 #  MAIN
 # ══════════════════════════════════════════════════════════════════════
 
 def main():
+    # 1. Controllo Accesso (PRIMA di ogni altra cosa)
+    check_access_password()
+
     show_header()
 
     # Sidebar con info utente
