@@ -304,7 +304,7 @@ def _show_ai_interface(tracks):
                 # Log a video dei brani classificati
                 with results_container:
                     msg = ""
-                    for track, cats in list(batch_result.items())[:3]: # Mostra primi 3 del batch
+                    for track, cats in batch_result.items():
                          msg += f"🎵 **{track}** → `{' '.join(cats)}`\n\n"
                     st.info(msg) 
                 
