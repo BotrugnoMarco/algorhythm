@@ -405,6 +405,12 @@ def create_playlists(mode="all"):
             if st.button("🔄 Force Logout Now", key="force_logout_error"):
                 if os.path.exists(auth_manager.cache_path):
                      os.remove(auth_manager.cache_path)
+                
+                # Rimuovi anche cache tracce per sicurezza
+                track_cache_path = f"user_data/tracks_{user_id}.json"
+                if os.path.exists(track_cache_path):
+                     os.remove(track_cache_path)
+
                 st.session_state.clear()
                 st.rerun()
             st.stop()
@@ -640,9 +646,10 @@ def main():
                 # Rimuovi file di cache token
                 if os.path.exists(".spotify_cache"):
                     os.remove(".spotify_cache")
-                # Rimuovi file di cache tracce (opzionale, ma pulito)
-                # if os.path.exists(f"user_data/tracks_{user['id']}.json"):
-                #     os.remove(f"user_data/tracks_{user['id']}.json")
+                # Rimuovi file di cache tracce
+                track_cache_path = f"user_data/tracks_{user['id']}.json"
+                if os.path.exists(track_cache_path):
+                    os.remove(track_cache_path)
                 
                 # Pulisci session state
                 st.session_state.clear()
