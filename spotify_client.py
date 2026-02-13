@@ -13,7 +13,7 @@ from spotipy.oauth2 import SpotifyOAuth
 load_dotenv()
 
 # ── Configurazione OAuth2 ──────────────────────────────────────────────
-SCOPES = "user-library-read playlist-modify-public playlist-modify-private"
+SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private"
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
