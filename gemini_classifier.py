@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Proviamo il puntatore generico "latest" (spesso mappato a versioni stabili con quota attiva)
-# I modelli preview v3 e v2.0-flash sembrano avere limit=0 nel tuo tier attuale.
-MODEL_NAME = "models/gemini-pro-latest" 
-BATCH_SIZE = 5            
+# Utilizziamo l'alias "flash-latest" presente nella tua lista. 
+# È la scelta più sicura per il Free Tier (solitamente punta a 1.5 Flash).
+MODEL_NAME = "models/gemini-flash-latest" 
+BATCH_SIZE = 10           # Flash gestisce bene batch più grandi
 MAX_RETRIES = 5           
 RETRY_DELAY = 10
 
@@ -73,6 +73,7 @@ def _build_user_prompt(labels: list[str]) -> str:
 
 def _init_model() -> genai.GenerativeModel:
     """Inizializza il modello Gemini con configurazione JSON."""
+    logger.info(f"Inizializzazione modello Gemini: {MODEL_NAME}")
     genai.configure(api_key=GEMINI_API_KEY)
     return genai.GenerativeModel(
         model_name=MODEL_NAME,
