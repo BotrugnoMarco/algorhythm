@@ -10,6 +10,7 @@ import json
 import logging
 import streamlit as st
 import pandas as pd
+from spotipy.exceptions import SpotifyException
 
 # Configurazione Logging di base per vedere INFO su console/file
 logging.basicConfig(
@@ -375,23 +376,40 @@ def create_playlists(mode="all"):
 
     # Recuperiamo info sulle playlist già create in questa sessione
     created_info = st.session_state.get("created_info", [])
+    
+    auth_manager = get_auth_manager()
 
-    for idx, (name, bucket) in enumerate(all_buckets.items(), 1):
-        if not bucket:
-            continue
+    try:
+        for idx, (name, bucket) in enumerate(all_buckets.items(), 1):
+            if not bucket:
+                continue
 
-        pl_progress.progress(idx / total, text=f"Processing: {name} ({len(bucket)} brani)…")
+            pl_progress.progress(idx / total, text=f"Processing: {name} ({len(bucket)} brani)…")
 
-        playlist_id = get_or_create_playlist(
-            sp, user_id, name,
-            description=f"Creata da AlgoRhythm 🎵 – {len(bucket)} brani"
-        )
-        uris = [t["track_id"] for t in bucket]
-        add_tracks_to_playlist(sp, playlist_id, uris)
+            playlist_id = get_or_create_playlist(
+                sp, user_id, name,
+                description=f"Creata da AlgoRhythm 🎵 – {len(bucket)} brani"
+            )
+            uris = [t["track_id"] for t in bucket]
+            add_tracks_to_playlist(sp, playlist_id, uris)
 
-        # Aggiungi alla lista solo se non c'è già (per evitare duplicati in report)
-        if not any(x["Playlist"] == name for x in created_info):
-            created_info.append({"Playlist": name, "Brani": len(bucket)})
+            # Aggiungi alla lista solo se non c'è già (per evitare duplicati in report)
+            if not any(x["Playlist"] == name for x in created_info):
+                created_info.append({"Playlist": name, "Brani": len(bucket)})
+    
+    except SpotifyException as e:
+        if e.http_status == 403:
+            st.error("🚨 ERRORE DI PERMESSI: Spotify ha rifiutato l'operazione (403 Forbidden).")
+            st.warning("⚠️ Probabilmente i permessi dell'app sono cambiati o il token è scaduto/invalido per questa operazione.")
+            st.info("💡 Soluzione: Esegui il Logout dalla barra laterale (pulsante 'Logout / Reset Cache') e ri-effettua il Login.")
+            if st.button("🔄 Force Logout Now", key="force_logout_error"):
+                if os.path.exists(auth_manager.cache_path):
+                     os.remove(auth_manager.cache_path)
+                st.session_state.clear()
+                st.rerun()
+            st.stop()
+        else:
+            raise e
 
     pl_progress.progress(1.0, text="✅ Operazione completata!")
     
@@ -617,6 +635,19 @@ def main():
             if user.get("images"):
                 st.image(user["images"][0]["url"], width=100)
             st.caption(f"ID: {user['id']}")
+            
+            if st.button("🚪 Logout / Reset Cache", use_container_width=True):
+                # Rimuovi file di cache token
+                if os.path.exists(".spotify_cache"):
+                    os.remove(".spotify_cache")
+                # Rimuovi file di cache tracce (opzionale, ma pulito)
+                # if os.path.exists(f"user_data/tracks_{user['id']}.json"):
+                #     os.remove(f"user_data/tracks_{user['id']}.json")
+                
+                # Pulisci session state
+                st.session_state.clear()
+                st.rerun()
+
             st.markdown("---")
 
         if "tracks" in st.session_state:
