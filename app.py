@@ -6,6 +6,7 @@ Avvia con:  streamlit run app.py
 """
 
 import os  # Necessario per leggere variabili d'ambiente
+import json
 import logging
 import streamlit as st
 import pandas as pd
@@ -135,14 +136,43 @@ def authenticate():
 #  FASE 2 – Fetch liked songs
 # ══════════════════════════════════════════════════════════════════════
 
+CACHE_DIR = "user_data"
+os.makedirs(CACHE_DIR, exist_ok=True)
+
 def fetch_tracks():
-    """Scarica le liked songs (con progress bar) e le salva in session."""
+    """Scarica le liked songs (con progress bar) e le salva in session. Usa caching su disco."""
     if "tracks" in st.session_state:
         return
 
     sp = st.session_state["sp"]
+    user = st.session_state.get("user", {})
+    user_id = user.get("id", "unknown_user")
+    
+    cache_file = os.path.join(CACHE_DIR, f"tracks_{user_id}.json")
+    
+    # 1. TENTATIVO CARICAMENTO DA CACHE
+    # Se il file esiste, evitiamo di chiamare Spotify (risparmio API)
+    if os.path.exists(cache_file):
+        # Aggiungiamo un toggle nella sidebar o un bottone per forzare il refresh
+        # Per ora usiamo logica semplice: se c'è, usalo, a meno che l'utente non chieda refresh
+        if not st.session_state.get("force_refresh_tracks", False):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cached_tracks = json.load(f)
+                st.session_state["tracks"] = cached_tracks
+                st.info(f"📂 **Cache trovata!** Caricati {len(cached_tracks)} brani dal disco locale (nessuna chiamata API).")
+                
+                if st.button("🔄 Forza riscaricamento da Spotify", key="btn_force_refresh"):
+                    st.session_state["force_refresh_tracks"] = True
+                    st.rerun()
+                return
+            except Exception as e:
+                st.warning(f"Cache corrotta, procedo al download: {e}")
 
-    st.subheader("📥 Scaricamento Liked Songs")
+    # 2. DOWNLOAD DA SPOTIFY (Se non c'è cache o force refresh richiesto)
+    st.subheader("📥 Scaricamento Liked Songs da Spotify")
+    st.session_state["force_refresh_tracks"] = False # Reset flag
+
     progress_bar = st.progress(0, text="Recupero le tue tracce salvate…")
     status_text = st.empty()
 
@@ -151,12 +181,31 @@ def fetch_tracks():
         progress_bar.progress(pct, text=f"Scaricate {done}/{total} tracce…")
         status_text.caption(f"Pagina {done // 50} completata")
 
-    tracks = fetch_all_liked_songs(sp, progress_callback=_progress)
+    try:
+        tracks = fetch_all_liked_songs(sp, progress_callback=_progress)
+        
+        # Salvataggio su disco per il futuro
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(tracks, f)
+            
+        progress_bar.progress(1.0, text=f"✅ {len(tracks)} tracce scaricate!")
+        status_text.empty()
+        st.session_state["tracks"] = tracks
+        st.success(f"**{len(tracks)}** tracce scaricate e salvate in cache!")
+        
+    except Exception as e:
+        status_text.empty()
+        st.error(f"Errore durante il download da Spotify: {e}")
+        # Se abbiamo fallito ma c'è una cache vecchia, proviamola come fallback
+        if os.path.exists(cache_file):
+            st.warning("⚠️ Impossibile contattare Spotify (Rate Limit?), carico l'ultima versione salvata.")
+            with open(cache_file, "r", encoding="utf-8") as f:
+                 st.session_state["tracks"] = json.load(f)
+            return
+        else:
+            st.error("🛑 Impossibile proseguire senza tracce. Riprova più tardi.")
+            st.stop()
 
-    progress_bar.progress(1.0, text=f"✅ {len(tracks)} tracce scaricate!")
-    status_text.empty()
-    st.session_state["tracks"] = tracks
-    st.success(f"**{len(tracks)}** tracce trovate nella tua libreria!")
 
 
 # ══════════════════════════════════════════════════════════════════════
