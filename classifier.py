@@ -28,6 +28,7 @@ GENRE_PLAYLISTS: list[str] = [
     "💔 Deep & Emotional",
     "⚡ High Voltage",
     "🍃 Chill State of Mind",
+    "⚠️ To Review",
 ]
 
 

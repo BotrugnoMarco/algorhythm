@@ -146,7 +146,7 @@ def _classify_batch(model: genai.GenerativeModel,
                     logger.warning(
                         "Nessuna categoria valida per '%s' → default", label
                     )
-                    validated = ["🌍 Pop & Radio Hits"]
+                    validated = ["⚠️ To Review"]
                 result[label] = validated
 
             return result
@@ -163,7 +163,7 @@ def _classify_batch(model: genai.GenerativeModel,
 
     # Se tutti i tentativi falliscono, assegna un fallback
     logger.error("Tutti i tentativi falliti per il batch. Uso fallback.")
-    return {label: ["🌍 Pop & Radio Hits"] for label in labels}
+    return {label: ["⚠️ To Review"] for label in labels}
 
 
 def _fuzzy_match_category(candidate: str | None,
