@@ -522,6 +522,9 @@ def main():
 
     show_header()
 
+    # 2. Autenticazione (spostata PRIMA della sidebar per avere i dati utente subito)
+    authenticate()
+
     # Sidebar con info utente
     with st.sidebar:
         st.markdown("## 🎵 AlgoRhythm")
@@ -546,7 +549,7 @@ def main():
         st.caption("v1.0 · Streamlit + Spotipy + Gemini")
 
     # Pipeline principale
-    authenticate()
+    # authenticate()  <-- Spostato sopra
     fetch_tracks()
 
     # Se le playlist sono già state create, mostra la dashboard
