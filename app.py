@@ -252,14 +252,15 @@ def classify_tracks():
         except Exception as e:
             st.error(f"Errore durante classificazione AI: {e}")
             st.session_state["is_running"] = False
+            # NON facciamo rerun qui, altrimenti l'errore sparisce subito!
+            return
         
-        # Se il loop è finito senza errori e senza stop manuale, significa che abbiamo finito tutto
+        # Se il loop è finito senza errori e senza stop manuale
         if st.session_state["is_running"]:
              st.session_state["is_running"] = False
              st.success("Analisi completata!")
-        
-        # Rerun per aggiornare la view finale (mostrare bottone Crea Playlist)
-        st.rerun()
+             # Rerun SOLO se completato con successo per pulire la UI
+             st.rerun()
 
     # Se abbiamo risultati (parziali o totali), costruiamo i bucket
     if "classifications" in st.session_state and st.session_state["classifications"]:
