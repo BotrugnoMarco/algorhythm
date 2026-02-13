@@ -168,23 +168,102 @@ def classify_tracks():
 
     # ── Classificazione AI ──
     st.subheader("🤖 Classificazione AI con Gemini")
-    total_batches_est = (len(tracks) + 19) // 20
-    ai_progress = st.progress(0, text="Invio brani a Gemini…")
+    
+    stop_btn = st.button("🛑 Stop Classificazione", key="stop_ai")
+    
     ai_status = st.empty()
+    ai_progress = st.progress(0, text="Avvio classificazione...")
+    results_container = st.expander("Dettaglio Classificazione (Live)", expanded=True)
+    
+    classifications = {}
+    
+    # Bottoni di controllo
+    start_btn = st.empty()
+    stop_btn = st.empty()
+    
+    # Stato di esecuzione
+    if "is_running" not in st.session_state:
+        st.session_state["is_running"] = False
+    
+    # Bottone AVVIA
+    if not st.session_state["is_running"]:
+        if start_btn.button("▶️ Avvia Classificazione AI", key="start_ai"):
+            st.session_state["is_running"] = True
+            st.rerun()
+    else:
+        # Bottone STOP (solo se sta girando)
+        if stop_btn.button("🛑 Interrompi esecuzione", key="stop_ai"):
+            st.session_state["is_running"] = False
+            st.warning("Esecuzione interrotta dall'utente.")
+            # Non facciamo rerun immediato per permettere di salvare i risultati parziali
+    
+    # Esecuzione Loop
+    if st.session_state["is_running"]:
+        ai_status = st.empty()
+        ai_progress = st.progress(0, text="Avvio classificazione...")
+        results_container = st.container() # Container per log live scorrevole
+        
+        classifications = st.session_state.get("classifications", {})
+        
+        # Logica di "Resume": 
+        # Se abbiamo già classificazioni, non dovremmo ricominciare da zero ma saltare i brani già fatti
+        # Per semplicità in questa v1, se premi stop e riavvii, ricominciamo il processo, 
+        # MA teniamo le classificazioni vecchie se non sono sovrascritte.
+        # Sarebbe meglio filtrare i brani da inviare, ma richiederebbe modifiche a gemini_classifier.py
+        # MODIFICA: Per ora lasciamo che riparta (utile x retry errori), 
+        # ma l'utente vede il log live.
+        
+        classifier_generator = classify_all_tracks(tracks)
+        
+        try:
+            for batch_num, total_batches, batch_result in classifier_generator:
+                # Controlla se l'utente ha premuto Stop nel frattempo
+                # Nota: Streamlit non aggiorna st.session_state["is_running"] dentro un loop bloccante 
+                # a meno che non usiamo st.rerun(). 
+                # Tuttavia, il bottone "Stop" sopra aggiorna lo stato al prossimo ciclo di script.
+                # TRUCCO: Un loop heavy blocca l'interazione. Dobbiamo usare un approccio asincrono o
+                # accettare che "Stop" funzioni solo al termine del batch corrente.
+                # Per la UX, stop_btn.button causa un rerun immediato che imposta is_running=False
+                # Quindi al prossimo rerun entriamo nell'else del blocco "is_running"
+                pass 
+                
+                # Aggiornamento UI
+                pct = batch_num / total_batches if total_batches else 0
+                ai_progress.progress(pct, text=f"Batch {batch_num}/{total_batches} completato...")
+                
+                # Log a video dei brani classificati
+                with results_container:
+                    msg = ""
+                    for track, cats in list(batch_result.items())[:3]: # Mostra primi 3 del batch
+                         msg += f"🎵 **{track}** → `{' '.join(cats)}`\n\n"
+                    st.info(msg) # Usa st.info per un box visibile che si aggiunge
+                
+                classifications.update(batch_result)
+                
+                # Salva stato parziale in sessione
+                st.session_state["classifications"] = classifications
+                
+        except Exception as e:
 
-    def _ai_progress(done, total):
-        pct = done / total if total else 0
-        ai_progress.progress(pct, text=f"Batch {done}/{total} classificati…")
-        ai_status.caption(f"~{done * 20} brani analizzati")
+            st.error(f"Errore: {e}")
+            st.session_state["is_running"] = False
+        
+        if "classifications" in st.session_state and st.session_state["classifications"]:
+            st.rerun()
 
-    classifications = classify_all_tracks(tracks, progress_callback=_ai_progress)
-
-    ai_progress.progress(1.0, text="✅ Classificazione AI completata!")
-    ai_status.empty()
-
-    genre_buckets = build_genre_buckets(tracks, classifications)
-    st.session_state["genre_buckets"] = genre_buckets
-    st.session_state["classifications"] = classifications
+    # Se abbiamo risultati (parziali o totali), costruiamo i bucket
+    if "classifications" in st.session_state and st.session_state["classifications"]:
+        classifications = st.session_state["classifications"]
+        genre_buckets = build_genre_buckets(tracks, classifications)
+        st.session_state["genre_buckets"] = genre_buckets
+        
+        st.info(f"Classificati {len(classifications)} brani su {len(tracks)}.")
+        
+        # Se abbiamo almeno qualche classificazione (anche parziale), permettiamo di creare playlist
+        if classifications and not st.session_state["is_running"]:
+             if st.button("🚀 Crea Playlist con risultati attuali", type="primary"):
+                 create_playlists()
+                 st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -172,30 +172,17 @@ def _fuzzy_match_category(candidate: str | None,
 
 # ── Funzione pubblica ─────────────────────────────────────────────────
 
-def classify_all_tracks(tracks: list[dict],
-                        progress_callback=None) -> dict[str, list[str]]:
+def classify_all_tracks(tracks: list[dict]):
     """
-    Classifica tutte le tracce in batch da 20, inviandole a Gemini.
-
-    Parametri
-    ---------
-    tracks : list[dict]
-        Lista di tracce (ognuna deve avere il campo "label").
-    progress_callback : callable, opzionale
-        Funzione (batch_completati, batch_totali) per aggiornare
-        la progress bar.
-
-    Ritorna
-    -------
-    dict[str, list[str]]
-        Mappa completa  { "Artist - Title": ["cat1", "cat2"] }
+    Generatore che classifica le tracce in batch.
+    Yielda (batch_index, total_batches, partial_results) ad ogni step.
+    Permette al chiamante di controllare il loop e aggiornare la UI.
     """
     model = _init_model()
 
     labels = [t["label"] for t in tracks]
     total_batches = (len(labels) + BATCH_SIZE - 1) // BATCH_SIZE
-    all_classifications: dict[str, list[str]] = {}
-
+    
     for i in range(0, len(labels), BATCH_SIZE):
         batch = labels[i : i + BATCH_SIZE]
         batch_num = i // BATCH_SIZE + 1
@@ -203,16 +190,13 @@ def classify_all_tracks(tracks: list[dict],
         logger.info("Classifico batch %d/%d (%d brani)…",
                      batch_num, total_batches, len(batch))
 
-        result = _classify_batch(model, batch)
-        all_classifications.update(result)
+        # Esegue la classificazione del batch
+        batch_result = _classify_batch(model, batch)
+        
+        # Restituisce il controllo al chiamante
+        yield batch_num, total_batches, batch_result
 
-        if progress_callback:
-            progress_callback(batch_num, total_batches)
-
-        # Rate-limiting gentile tra batch (evita 429)
-        # Il Free Tier ha limiti di 15 RPM (Requests Per Minute)
-        # Con batch da 10, possiamo fare circa 1 richiesta ogni 4 secondi per stare sicuri
+        # Rate-limiting gentile tra batch
         if i + BATCH_SIZE < len(labels):
             time.sleep(4)
 
-    return all_classifications
