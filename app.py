@@ -187,9 +187,12 @@ def classify_tracks():
     
     # Bottone AVVIA
     if not st.session_state["is_running"]:
+        # Se usiamo st.button con key fissa, esso ritorna True solo per un ciclo.
+        # Memorizziamo lo stato in is_running.
         if start_btn.button("▶️ Avvia Classificazione AI", key="start_ai"):
             st.session_state["is_running"] = True
-            st.rerun()
+            st.rerun()  # Riavvia lo script per far sparire il bottone Avvia e mostrare lo Stop e il loop
+
     else:
         # Bottone STOP (solo se sta girando)
         if stop_btn.button("🛑 Interrompi esecuzione", key="stop_ai"):
