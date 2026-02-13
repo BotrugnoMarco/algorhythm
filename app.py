@@ -154,17 +154,24 @@ def fetch_tracks():
 
 def classify_tracks():
     """Classifica per decade (math) e genere (AI) e salva i bucket."""
-    if "year_buckets" in st.session_state:
-        return
+    # Rimosso il check iniziale che bloccava il rendering al rerun!
+    # if "year_buckets" in st.session_state: return  <-- Questo era il colpevole
 
     tracks = st.session_state["tracks"]
 
     # ── Classificazione per decade (istantanea) ──
     st.subheader("📊 Classificazione per Decade")
-    year_buckets = build_year_buckets(tracks)
+    
+    # Calcoliamo o recuperiamo i bucket per anni
+    if "year_buckets" not in st.session_state:
+        year_buckets = build_year_buckets(tracks)
+        st.session_state["year_buckets"] = year_buckets
+    else:
+        year_buckets = st.session_state["year_buckets"]
+
+    # Mostriamo i risultati (sempre, così restano visibili)
     for name, bucket in year_buckets.items():
         st.write(f"  {name}: **{len(bucket)}** brani")
-    st.session_state["year_buckets"] = year_buckets
 
     # ── Classificazione AI ──
     st.subheader("🤖 Classificazione AI con Gemini")
