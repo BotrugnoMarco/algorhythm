@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "gemini-1.5-flash"
+# Modello più stabile
+MODEL_NAME = "gemini-2.0-flash" 
 BATCH_SIZE = 20          # tracce per richiesta
 MAX_RETRIES = 3          # tentativi in caso di errore
 RETRY_DELAY = 5          # secondi tra un retry e l'altro
@@ -51,7 +52,7 @@ Le categorie disponibili sono:
 REGOLE IMPORTANTI:
 - Ogni brano va in 1 o MASSIMO 2 categorie.
 - I brani Indie NON vanno in "Guitar Anthems".
-- I brani Rap/Trap italiani vanno in "Concrete Jungle", NON in "Pop & Cantautorato ITA".
+- **REGOLA SPECIALE ITALIA**: Se l'artista o il brano è italiano, DEVI inserirlo ANCHE nella categoria "🇮🇹 Pop & Cantautorato ITA", oltre alla sua categoria di genere (es. Rap, Indie, Rock). Questa categoria "extra" non conta nel limite.
 - Rispondi SOLO con il JSON richiesto, senza testo aggiuntivo."""
 
 
@@ -61,7 +62,7 @@ def _build_user_prompt(labels: list[str]) -> str:
     return (
         f"Classifica i seguenti {len(labels)} brani. "
         f"Rispondi con un array JSON di oggetti, ognuno con le chiavi "
-        f'"track" (stringa esatta del brano) e "categories" (array di 1 o 2 categorie).\n\n'
+        f'"track" (stringa esatta del brano) e "categories" (array di stringhe).\n\n'
         f"{numbered}"
     )
 
@@ -108,13 +109,13 @@ def _classify_batch(model: genai.GenerativeModel,
                     cats = item.get("categories", [])
                     if isinstance(cats, str):
                         cats = [cats]
-                    track_map[track] = cats[:2]  # max 2
+                    track_map[track] = cats[:4]  # max 4 per sicurezza
             elif isinstance(parsed, dict):
                 for track, cats in parsed.items():
                     if isinstance(cats, str):
                         cats = [cats]
                     if isinstance(cats, list):
-                        track_map[track] = cats[:2]
+                        track_map[track] = cats[:4]
 
             # Validazione categorie
             result: dict[str, list[str]] = {}
