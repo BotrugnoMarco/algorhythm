@@ -21,11 +21,12 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Modello selezionato dalla lista disponibile dell'utente
-MODEL_NAME = "models/gemini-3-pro-preview" 
-BATCH_SIZE = 5            # Basso batch rate per modello Preview
+# Proviamo il puntatore generico "latest" (spesso mappato a versioni stabili con quota attiva)
+# I modelli preview v3 e v2.0-flash sembrano avere limit=0 nel tuo tier attuale.
+MODEL_NAME = "models/gemini-pro-latest" 
+BATCH_SIZE = 5            
 MAX_RETRIES = 5           
-RETRY_DELAY = 20          # Aumentato delay per gestire limiti stringenti del tier Preview
+RETRY_DELAY = 10
 
 
 # ── Prompt di sistema ──────────────────────────────────────────────────
