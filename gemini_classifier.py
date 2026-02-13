@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Modello più stabile
 MODEL_NAME = "gemini-2.0-flash" 
-BATCH_SIZE = 10          # RIDOTTO DA 20 A 10 per ridurre i token per minuto
-MAX_RETRIES = 5          # AUMENTATO per gestire meglio i 429
-RETRY_DELAY = 10         # AUMENTATO per dare più tempo al reset del rate limit
+BATCH_SIZE = 5           # RIDOTTO ULTERIORMENTE (da 10 a 5) per evitare limiti token
+MAX_RETRIES = 5          
+RETRY_DELAY = 15         # AUMENTATO da 10 a 15 per sicurezza sui 429
 
 # ── Prompt di sistema ──────────────────────────────────────────────────
 
@@ -197,6 +197,7 @@ def classify_all_tracks(tracks: list[dict]):
         yield batch_num, total_batches, batch_result
 
         # Rate-limiting gentile tra batch
+        # Aumentato drasticamente per Free Tier (evita 429 Quota Exceeded)
         if i + BATCH_SIZE < len(labels):
-            time.sleep(4)
+            time.sleep(10)
 
