@@ -164,10 +164,22 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
                            playlist_id: str,
                            track_uris: list[str]) -> None:
     """
-    Aggiunge le tracce alla playlist in blocchi da 100
-    (limite dell'API Spotify).
+    Sostituisce le tracce nella playlist (svuotandola prima),
+    gestendo i blocchi da 100 tracce.
     """
     chunk_size = 100
-    for i in range(0, len(track_uris), chunk_size):
+    
+    # Se non ci sono tracce, svuotiamo e basta
+    if not track_uris:
+        sp.playlist_replace_items(playlist_id, [])
+        return
+
+    # Primo chunk: usa replace_items per sovrascrivere il contenuto precedente
+    # Questo effettua Svuota + Aggiungi primi 100 in un colpo solo
+    first_chunk = track_uris[:chunk_size]
+    sp.playlist_replace_items(playlist_id, first_chunk)
+
+    # Chunk successivi: usa add_items in append
+    for i in range(chunk_size, len(track_uris), chunk_size):
         chunk = track_uris[i : i + chunk_size]
         sp.playlist_add_items(playlist_id, chunk)
