@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Modello più stabile
 MODEL_NAME = "gemini-2.0-flash" 
-BATCH_SIZE = 20          # tracce per richiesta
-MAX_RETRIES = 3          # tentativi in caso di errore
-RETRY_DELAY = 5          # secondi tra un retry e l'altro
+BATCH_SIZE = 10          # RIDOTTO DA 20 A 10 per ridurre i token per minuto
+MAX_RETRIES = 5          # AUMENTATO per gestire meglio i 429
+RETRY_DELAY = 10         # AUMENTATO per dare più tempo al reset del rate limit
 
 # ── Prompt di sistema ──────────────────────────────────────────────────
 
@@ -210,7 +210,9 @@ def classify_all_tracks(tracks: list[dict],
             progress_callback(batch_num, total_batches)
 
         # Rate-limiting gentile tra batch (evita 429)
+        # Il Free Tier ha limiti di 15 RPM (Requests Per Minute)
+        # Con batch da 10, possiamo fare circa 1 richiesta ogni 4 secondi per stare sicuri
         if i + BATCH_SIZE < len(labels):
-            time.sleep(1.5)
+            time.sleep(4)
 
     return all_classifications
