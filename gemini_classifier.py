@@ -21,13 +21,11 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Modello richiesto: gemini-1.5-pro (Il più robusto attualmente disponibile pubblicamente)
-# Nota: gemini-3-pro-preview non è un endpoint API pubblico valido al momento.
-# Uso la versione 1.5 Pro che è la più potente disponibile nel tier gratuito/payg.
-MODEL_NAME = "gemini-1.5-pro" 
-BATCH_SIZE = 5            # Basso batch rate per modello Heavy
+# Modello selezionato dalla lista disponibile dell'utente
+MODEL_NAME = "models/gemini-3-pro-preview" 
+BATCH_SIZE = 5            # Basso batch rate per modello Preview
 MAX_RETRIES = 5           
-RETRY_DELAY = 15          # Alto delay per evitare 429
+RETRY_DELAY = 20          # Aumentato delay per gestire limiti stringenti del tier Preview
 
 
 # ── Prompt di sistema ──────────────────────────────────────────────────
