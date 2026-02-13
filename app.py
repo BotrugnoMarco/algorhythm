@@ -6,8 +6,19 @@ Avvia con:  streamlit run app.py
 """
 
 import os  # Necessario per leggere variabili d'ambiente
+import logging
 import streamlit as st
 import pandas as pd
+
+# Configurazione Logging di base per vedere INFO su console/file
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
 import plotly.express as px
 import plotly.graph_objects as go
 
