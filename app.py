@@ -208,32 +208,59 @@ def fetch_tracks():
 
 
 
+
 # ══════════════════════════════════════════════════════════════════════
-#  FASE 3 – Classificazione
+#  FASE 3 – Logic Hub: Scelta Modalità & Classificazione AI
 # ══════════════════════════════════════════════════════════════════════
 
 def classify_tracks():
-    """Classifica per decade (math) e genere (AI) e salva i bucket."""
-    # Rimosso il check iniziale che bloccava il rendering al rerun!
-    # if "year_buckets" in st.session_state: return  <-- Questo era il colpevole
-
-    tracks = st.session_state["tracks"]
-
-    # ── Classificazione per decade (istantanea) ──
-    st.subheader("📊 Classificazione per Decade")
+    """Logic Hub: Mostra scelta (Decadi vs AI) e gestisce l'interfaccia AI."""
     
-    # Calcoliamo o recuperiamo i bucket per anni
+    tracks = st.session_state["tracks"]
+    
+    # Calcolo sempre i bucket per anni (è istantaneo e serve comunque)
     if "year_buckets" not in st.session_state:
-        year_buckets = build_year_buckets(tracks)
-        st.session_state["year_buckets"] = year_buckets
+        st.session_state["year_buckets"] = build_year_buckets(tracks)
+    
+    # Se l'utente non ha ancora attivato la modalità AI, mostriamo il menu di scelta
+    if not st.session_state.get("ai_mode_active", False):
+        st.markdown("## 🎛️ Scegli la tua strada")
+        st.write("Come vuoi organizzare la tua libreria oggi?")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.info("📅 **Modalità Classica (Decadi)**")
+            st.caption("Crea playlist basate sull'anno di uscita (es. 90s, 00s, 2024).")
+            # Mostra preview
+            year_buckets = st.session_state["year_buckets"]
+            st.write(f"Verranno create **{len(year_buckets)}** playlist temporali.")
+            
+            if st.button("🚀 Crea Playlist per Decadi", use_container_width=True):
+                 create_playlists(mode="decades")
+                 st.rerun()
+
+        with col2:
+            st.info("🤖 **Modalità AI (Generi & Mood)**")
+            st.caption("Usa Gemini per analizzare il mood di ogni brano (Indie, Club, Sad...).")
+            st.write(f"Richiede analisi di **{len(tracks)}** brani.")
+            
+            if st.button("✨ Vai alla Classificazione AI", use_container_width=True):
+                st.session_state["ai_mode_active"] = True
+                st.rerun()
+                
     else:
-        year_buckets = st.session_state["year_buckets"]
+        # ── SEZIONE AI ATTIVA ──
+        # Mostra pulsante per tornare indietro
+        if st.button("⬅️ Torna alla scelta iniziale"):
+            st.session_state["ai_mode_active"] = False
+            st.rerun()
+            
+        _show_ai_interface(tracks)
 
-    # Mostriamo i risultati (sempre, così restano visibili)
-    for name, bucket in year_buckets.items():
-        st.write(f"  {name}: **{len(bucket)}** brani")
 
-    # ── Classificazione AI ──
+def _show_ai_interface(tracks):
+    """Logica interna per la UI di classificazione AI."""
     st.subheader("🤖 Classificazione AI con Gemini")
     
     # Bottoni di controllo
@@ -248,14 +275,9 @@ def classify_tracks():
     
     # Bottone AVVIA
     if not st.session_state["is_running"]:
-        # Se usiamo st.button con key fissa, esso ritorna True solo per un ciclo.
-        # Memorizziamo lo stato in is_running.
         if start_btn.button("▶️ Avvia Classificazione AI", key="start_ai"):
-            if not tracks:
-                st.error("Nessuna traccia trovata! Assicurati di aver fatto il fetch.")
-            else:
-                st.session_state["is_running"] = True
-                st.rerun()  # Riavvia lo script per far sparire il bottone Avvia e mostrare lo Stop e il loop
+            st.session_state["is_running"] = True
+            st.rerun()
 
     else:
         # Bottone STOP (solo se sta girando)
@@ -270,30 +292,10 @@ def classify_tracks():
         ai_progress = st.progress(0, text="Avvio classificazione...")
         results_container = st.container() # Container per log live scorrevole
         
-        classifications = st.session_state.get("classifications", {})
-        
-        # Logica di "Resume": 
-        # Se abbiamo già classificazioni, non dovremmo ricominciare da zero ma saltare i brani già fatti
-        # Per semplicità in questa v1, se premi stop e riavvii, ricominciamo il processo, 
-        # MA teniamo le classificazioni vecchie se non sono sovrascritte.
-        # Sarebbe meglio filtrare i brani da inviare, ma richiederebbe modifiche a gemini_classifier.py
-        # MODIFICA: Per ora lasciamo che riparta (utile x retry errori), 
-        # ma l'utente vede il log live.
-        
         classifier_generator = classify_all_tracks(tracks)
         
         try:
             for batch_num, total_batches, batch_result in classifier_generator:
-                # Controlla se l'utente ha premuto Stop nel frattempo
-                # Nota: Streamlit non aggiorna st.session_state["is_running"] dentro un loop bloccante 
-                # a meno che non usiamo st.rerun(). 
-                # Tuttavia, il bottone "Stop" sopra aggiorna lo stato al prossimo ciclo di script.
-                # TRUCCO: Un loop heavy blocca l'interazione. Dobbiamo usare un approccio asincrono o
-                # accettare che "Stop" funzioni solo al termine del batch corrente.
-                # Per la UX, stop_btn.button causa un rerun immediato che imposta is_running=False
-                # Quindi al prossimo rerun entriamo nell'else del blocco "is_running"
-                pass 
-                
                 # Aggiornamento UI
                 pct = batch_num / total_batches if total_batches else 0
                 ai_progress.progress(pct, text=f"Batch {batch_num}/{total_batches} completato...")
@@ -303,24 +305,21 @@ def classify_tracks():
                     msg = ""
                     for track, cats in list(batch_result.items())[:3]: # Mostra primi 3 del batch
                          msg += f"🎵 **{track}** → `{' '.join(cats)}`\n\n"
-                    st.info(msg) # Usa st.info per un box visibile che si aggiunge
+                    st.info(msg) 
                 
+                classifications = st.session_state.get("classifications", {})
                 classifications.update(batch_result)
-                
-                # Salva stato parziale in sessione
                 st.session_state["classifications"] = classifications
                 
         except Exception as e:
             st.error(f"Errore durante classificazione AI: {e}")
             st.session_state["is_running"] = False
-            # NON facciamo rerun qui, altrimenti l'errore sparisce subito!
             return
         
-        # Se il loop è finito senza errori e senza stop manuale
+        # Se il loop è finito senza errori
         if st.session_state["is_running"]:
              st.session_state["is_running"] = False
              st.success("Analisi completata!")
-             # Rerun SOLO se completato con successo per pulire la UI
              st.rerun()
 
     # Se abbiamo risultati (parziali o totali), costruiamo i bucket
@@ -331,41 +330,57 @@ def classify_tracks():
         
         st.info(f"Classificati {len(classifications)} brani su {len(tracks)}.")
         
-        # Se abbiamo almeno qualche classificazione (anche parziale), permettiamo di creare playlist
+        # Se abbiamo almeno qualche classificazione, permettiamo di creare playlist
         if classifications and not st.session_state["is_running"]:
-             if st.button("🚀 Crea Playlist con risultati attuali", type="primary"):
-                 create_playlists()
+             if st.button("🚀 Crea Playlist Generi (AI) + Decadi", type="primary"):
+                 create_playlists(mode="all") # Crea tutto insieme
                  st.rerun()
+
 
 
 # ══════════════════════════════════════════════════════════════════════
 #  FASE 4 – Creazione playlist su Spotify
 # ══════════════════════════════════════════════════════════════════════
 
-def create_playlists():
-    """Crea le playlist e aggiunge le tracce su Spotify."""
-    if "playlists_created" in st.session_state:
-        return
+def create_playlists(mode="all"):
+    """
+    Crea le playlist e aggiunge le tracce su Spotify.
+    mode: "all", "decades", "genres"
+    """
+    # Rimuoviamo il check bloccante, gestiamo la ricreazione
+    # if "playlists_created" in st.session_state: return
 
     sp = st.session_state["sp"]
     user_id = st.session_state["user"]["id"]
-    year_buckets = st.session_state["year_buckets"]
-    genre_buckets = st.session_state["genre_buckets"]
+    year_buckets = st.session_state.get("year_buckets", {})
+    genre_buckets = st.session_state.get("genre_buckets", {})
 
-    all_buckets = {**year_buckets, **genre_buckets}
+    all_buckets = {}
+    
+    # Seleziona cosa creare in base alla modalità
+    if mode == "all" or mode == "decades":
+        all_buckets.update(year_buckets)
+    
+    if mode == "all" or mode == "genres":
+        all_buckets.update(genre_buckets)
+        
+    if not all_buckets:
+        st.warning("Nessuna categoria selezionata o disponibile per la creazione!")
+        return
+
     total = len(all_buckets)
 
-    st.subheader("🚀 Creazione Playlist su Spotify")
-    pl_progress = st.progress(0, text="Creo le playlist…")
+    st.subheader(f"🚀 Creazione Playlist su Spotify ({mode.upper()})")
+    pl_progress = st.progress(0, text="Inizio creazione…")
 
-    created_info: list[dict] = []
+    # Recuperiamo info sulle playlist già create in questa sessione
+    created_info = st.session_state.get("created_info", [])
 
     for idx, (name, bucket) in enumerate(all_buckets.items(), 1):
         if not bucket:
-            pl_progress.progress(idx / total, text=f"Skip (vuota): {name}")
             continue
 
-        pl_progress.progress(idx / total, text=f"Creo: {name} ({len(bucket)} brani)…")
+        pl_progress.progress(idx / total, text=f"Processing: {name} ({len(bucket)} brani)…")
 
         playlist_id = get_or_create_playlist(
             sp, user_id, name,
@@ -374,13 +389,16 @@ def create_playlists():
         uris = [t["track_id"] for t in bucket]
         add_tracks_to_playlist(sp, playlist_id, uris)
 
-        created_info.append({"Playlist": name, "Brani": len(bucket)})
+        # Aggiungi alla lista solo se non c'è già (per evitare duplicati in report)
+        if not any(x["Playlist"] == name for x in created_info):
+            created_info.append({"Playlist": name, "Brani": len(bucket)})
 
-    pl_progress.progress(1.0, text="✅ Tutte le playlist sono pronte!")
+    pl_progress.progress(1.0, text="✅ Operazione completata!")
+    
     st.session_state["playlists_created"] = True
     st.session_state["created_info"] = created_info
 
-    st.success("Playlist create con successo! Controlla il tuo Spotify 🎧")
+    st.success("Playlist aggiornate con successo! 🎧")
 
 
 # ══════════════════════════════════════════════════════════════════════
