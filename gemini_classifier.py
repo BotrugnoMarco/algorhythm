@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Modello più stabile (versione specifica per evitare alias 404)
-MODEL_NAME = "gemini-1.5-flash-001" 
+# Modello più stabile (gemini-pro = v1.0, più diffuso)
+MODEL_NAME = "gemini-pro" 
 BATCH_SIZE = 10          
 MAX_RETRIES = 5           
 RETRY_DELAY = 10         
@@ -76,7 +76,8 @@ def _init_model() -> genai.GenerativeModel:
         model_name=MODEL_NAME,
         system_instruction=SYSTEM_PROMPT,
         generation_config=genai.GenerationConfig(
-            response_mime_type="application/json",
+            # Gemini Pro 1.0 gestisce meglio il JSON via prompt che via config
+            # response_mime_type="application/json", 
             temperature=0.2,
         ),
     )
@@ -97,7 +98,16 @@ def _classify_batch(model: genai.GenerativeModel,
         try:
             response = model.generate_content(prompt)
             raw_text = response.text.strip()
+            if raw_text.startswith("```"):
+                lines = raw_text.splitlines()
+                # Rimuove prima e ultima riga se sono marcatori
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                raw_text = "\n".join(lines).strip()
 
+            # P
             # Parse JSON — ci aspettiamo una lista di oggetti
             parsed = json.loads(raw_text)
 
