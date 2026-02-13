@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Modello più stabile
-MODEL_NAME = "gemini-1.5-flash" 
-BATCH_SIZE = 10           # Ripristiniamo un valore decente per la 1.5 Flash
+# Modello più stabile (versione specifica per evitare alias 404)
+MODEL_NAME = "gemini-1.5-flash-001" 
+BATCH_SIZE = 10          
 MAX_RETRIES = 5           
-RETRY_DELAY = 10          # Delay standard
+RETRY_DELAY = 10         
 
 # ── Prompt di sistema ──────────────────────────────────────────────────
 

@@ -32,6 +32,7 @@ else
 fi
 
 # Installa/Aggiorna librerie
+pip install --upgrade google-generativeai
 pip install -r requirements.txt
 
 # 3. Stop Vecchio Processo
