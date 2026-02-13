@@ -539,20 +539,14 @@ def main():
     authenticate()
     fetch_tracks()
 
-    # Pulsante per avviare la classificazione + creazione
-    if "playlists_created" not in st.session_state:
-        st.markdown("---")
-        if st.button(
-            "🚀  Classifica e Crea Playlist",
-            type="primary",
-            use_container_width=True,
-        ):
-            classify_tracks()
-            create_playlists()
-            st.rerun()
-    else:
+    # Se le playlist sono già state create, mostra la dashboard
+    if "playlists_created" in st.session_state:
         show_dashboard()
-
+    else:
+        # Altrimenti mostra l'interfaccia di classificazione interattiva
+        # Sarà classify_tracks a mostrare il bottone "Crea Playlist" quando pronto
+        st.markdown("---")
+        classify_tracks()
 
 if __name__ == "__main__":
     main()
