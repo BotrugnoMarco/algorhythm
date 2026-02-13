@@ -39,11 +39,13 @@ echo ""
 echo "[3/4] 🛑 Arresto vecchio processo..."
 
 # Cerca il PID di streamlit che esegue app.py
-PID=$(pgrep -f "streamlit run $APP_FILE")
+# || true serve perché pgrep restituisce exit code 1 se non trova nulla,
+# e con set -e questo farebbe terminare lo script.
+PID=$(pgrep -f "streamlit run $APP_FILE" || true)
 
 if [ -n "$PID" ]; then
     echo "   Processo trovato (PID: $PID). Terminazione..."
-    kill $PID
+    kill $PID || true
     sleep 2
 else
     echo "   Nessun processo attivo trovato da terminare."
@@ -53,8 +55,9 @@ fi
 echo ""
 echo "[4/4] 🚀 Avvio AlgoRhythm..."
 
-# Esegue in background con nohup, reindirizzando output su log
-nohup streamlit run $APP_FILE --server.port $PORT --server.address 0.0.0.0 > $LOG_FILE 2>&1 &
+# Esegue in background con nohup usando il path assoluto dell'eseguibile nel venv
+# Questo evita l'errore "command not found" se l'activate non persiste
+nohup ./venv/bin/streamlit run $APP_FILE --server.port $PORT --server.address 0.0.0.0 > $LOG_FILE 2>&1 &
 
 NEW_PID=$(pgrep -f "streamlit run $APP_FILE")
 echo "   ✅ Avviato con successo! (PID: $NEW_PID)"
