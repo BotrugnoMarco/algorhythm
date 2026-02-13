@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Modello più stabile
-MODEL_NAME = "gemini-2.0-flash" 
-BATCH_SIZE = 5           # RIDOTTO ULTERIORMENTE (da 10 a 5) per evitare limiti token
-MAX_RETRIES = 5          
-RETRY_DELAY = 15         # AUMENTATO da 10 a 15 per sicurezza sui 429
+MODEL_NAME = "gemini-1.5-flash" 
+BATCH_SIZE = 10           # Ripristiniamo un valore decente per la 1.5 Flash
+MAX_RETRIES = 5           
+RETRY_DELAY = 10          # Delay standard
 
 # ── Prompt di sistema ──────────────────────────────────────────────────
 
