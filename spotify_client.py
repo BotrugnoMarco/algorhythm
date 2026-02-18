@@ -148,9 +148,22 @@ def get_or_create_playlist(sp: spotipy.Spotify,
 
     for pl in playlists:
         if pl["name"] == name:
-            return pl["id"]
+            # ── VALIDAZIONE PERMESSI (FIX PER ERRORE 403) ──
+            # Se la playlist esiste ma è stata creata da una vecchia App (diverso Client ID),
+            # potremmo non avere i permessi per modificarla. Facciamo un test.
+            try:
+                # Proviamo ad aggiornare la descrizione (operazione innocua)
+                sp.playlist_change_details(pl["id"], description=description)
+                return pl["id"]
+            except spotipy.SpotifyException as e:
+                if e.http_status == 403:
+                    print(f"⚠️  Playlist '{name}' trovata ma NON modificabile (403). Probabilmente creata con altra App. Ne creo una nuova.")
+                    continue  # Ignora questa playlist e continuane a cercare altre o creane una nuova
+                else:
+                    # Se è un altro errore, lo solleviamo
+                    raise e
 
-    # Non trovata → crea
+    # Non trovata (o non scrivibile) → crea
     try:
         print(f"DEBUG: Tentativo creazione playlist per user_id='{user_id}' con nome='{name}'")
         new_pl = sp.user_playlist_create(
