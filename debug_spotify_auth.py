@@ -22,7 +22,7 @@ print(f"CLIENT_ID: {'✅ TROVATO' if os.getenv('SPOTIPY_CLIENT_ID') else '❌ MA
 print(f"CLIENT_SECRET: {'✅ TROVATO' if os.getenv('SPOTIPY_CLIENT_SECRET') else '❌ MANCANTE'}")
 print(f"REDIRECT_URI: {os.getenv('SPOTIPY_REDIRECT_URI')}")
 
-SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private"
+SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-read-email"
 
 def run_test():
     try:
