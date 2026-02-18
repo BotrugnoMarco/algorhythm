@@ -128,15 +128,46 @@ def fetch_all_liked_songs(sp: spotipy.Spotify,
 
 # ── Gestione Playlist ──────────────────────────────────────────────────
 
+def get_all_user_playlists(sp: spotipy.Spotify) -> list[dict]:
+    """
+    Recupera TUTTE le playlist dell'utente corrente.
+    Restituisce una lista di oggetti playlist (id, name, etc).
+    """
+    playlists = []
+    offset = 0
+    while True:
+        page = sp.current_user_playlists(limit=50, offset=offset)
+        playlists.extend(page["items"])
+        if page["next"] is None:
+            break
+        offset += 50
+    return playlists
+
+
 def get_or_create_playlist(sp: spotipy.Spotify,
                            user_id: str,
                            name: str,
-                           description: str = "") -> str:
+                           description: str = "",
+                           known_id: str = None) -> str:
     """
-    Restituisce l'ID di una playlist con il nome dato.
-    Se non esiste, la crea.
+    Restituisce l'ID di una playlist.
+    - Se known_id è fornito, restituisce direttamente quello (dopo verifica esistenza).
+    - Altrimenti cerca per nome. Se non esiste, la crea.
     """
-    # Cerca tra le playlist esistenti dell'utente
+    
+    # 1. Se abbiamo un ID mappato manualmente dall'utente, usiamo quello
+    if known_id:
+        try:
+            # Verifica che esista e sia accessibile
+            pl = sp.playlist(known_id)
+            # Verifica permesso scrittura (provi a svuotare)
+            sp.playlist_replace_items(known_id, [])
+            return known_id
+        except spotipy.SpotifyException as e:
+            print(f"⚠️ Playlist mappata '{known_id}' non accessibile/scrivibile. Fallback su ricerca per nome.")
+            # Se fallisce, procedi con la logica standard (ignora l'ID rotto)
+
+    # 2. Cerca tra le playlist esistenti dell'utente (per nome)
     playlists = []
     offset = 0
     while True:

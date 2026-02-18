@@ -30,6 +30,7 @@ from spotify_client import (
     fetch_all_liked_songs,
     get_or_create_playlist,
     add_tracks_to_playlist,
+    get_all_user_playlists, # Nuovo
 )
 from classifier import (
     YEAR_PLAYLISTS,
@@ -377,6 +378,9 @@ def create_playlists(mode="all"):
     # Recuperiamo info sulle playlist già create in questa sessione
     created_info = st.session_state.get("created_info", [])
     
+    # Configurazione manuale dell'utente (mappatura NOME -> ID)
+    pl_config = st.session_state.get("playlist_config", {})
+    
     auth_manager = get_auth_manager()
 
     try:
@@ -386,9 +390,13 @@ def create_playlists(mode="all"):
 
             pl_progress.progress(idx / total, text=f"Processing: {name} ({len(bucket)} brani)…")
 
+            # ID manuale se esiste mappatura per questa categoria
+            mapped_id = pl_config.get(name)
+
             playlist_id = get_or_create_playlist(
                 sp, user_id, name,
-                description=f"Creata da AlgoRhythm 🎵 – {len(bucket)} brani"
+                description=f"Creata da AlgoRhythm 🎵 – {len(bucket)} brani",
+                known_id=mapped_id
             )
             uris = [t["track_id"] for t in bucket]
             add_tracks_to_playlist(sp, playlist_id, uris)
@@ -662,9 +670,102 @@ def main():
 
         if "playlists_created" in st.session_state:
             st.success("✅ Playlist create!")
+        
+        # Sezione Impostazioni
+        st.markdown("---")
+        with st.expander("⚙️ Impostazioni Playlist"):
+            st.caption("Collega le categorie a playlist esistenti.")
+            
+            # Carica le playlist disponibili (una volta sola)
+            if "sp" in st.session_state and "user_playlists" not in st.session_state:
+                with st.spinner("Carico le tue playlist..."):
+                    try:
+                        st.session_state["user_playlists"] = get_all_user_playlists(st.session_state["sp"])
+                    except:
+                        st.warning("Impossibile caricare playlist.")
+
+            # Carica CONFIGURAZIONE salvata da file
+            mapping_file = "user_data/playlist_mapping.json"
+            if "playlist_config" not in st.session_state and os.path.exists(mapping_file):
+                try:
+                    with open(mapping_file, "r") as f:
+                        st.session_state["playlist_config"] = json.load(f)
+                except:
+                    pass # Se file corrotto o vuoto
+
+            # Mappatura Decadi
+            st.markdown("**Decadi**")
+            pl_config = st.session_state.get("playlist_config", {})
+            user_pls = st.session_state.get("user_playlists", [])
+            
+            # Helper per creare opzioni
+            options = ["(Crea Nuova)"] + [f"{p['name']}" for p in user_pls]
+            pl_map = {p['name']: p['id'] for p in user_pls} # Nome -> ID
+
+            config_changed = False 
+
+            for name in YEAR_PLAYLISTS.keys():
+                # Trova indice corrente
+                current_id = pl_config.get(name, None)
+                selected_index = 0
+                
+                # Se abbiamo un ID salvato, cerchiamo il nome corrispondente tra le playlist utente
+                if current_id:
+                     found_name = next((k for k, v in pl_map.items() if v == current_id), None)
+                     if found_name and found_name in options:
+                         selected_index = options.index(found_name)
+
+                choice = st.selectbox(f"{name}", options, index=selected_index, key=f"sel_{name}")
+                
+                new_id = None
+                if choice != "(Crea Nuova)":
+                    new_id = pl_map[choice]
+                
+                # Se è cambiato qualcosa rispetto al config attuale
+                if new_id != current_id:
+                    if new_id is None:
+                        if name in pl_config: del pl_config[name]
+                    else:
+                        pl_config[name] = new_id
+                    config_changed = True
+            
+            # Mappatura Generi (solo se necessario)
+            st.markdown("**Generi AI**")
+            for name in GENRE_PLAYLISTS:
+                current_id = pl_config.get(name, None)
+                selected_index = 0
+                
+                if current_id:
+                     found_name = next((k for k, v in pl_map.items() if v == current_id), None)
+                     if found_name and found_name in options:
+                         selected_index = options.index(found_name)
+
+                choice = st.selectbox(f"{name}", options, index=selected_index, key=f"sel_{name}")
+                
+                new_id = None
+                if choice != "(Crea Nuova)":
+                    new_id = pl_map[choice]
+
+                if new_id != current_id:
+                    if new_id is None:
+                        if name in pl_config: del pl_config[name]
+                    else:
+                        pl_config[name] = new_id
+                    config_changed = True
+
+            # SALVATAGGIO SU DISCO se cambiato
+            if config_changed:
+                st.session_state["playlist_config"] = pl_config
+                # Assicuriamoci che la cartella user_data esista (dovrebbe già esistere)
+                os.makedirs("user_data", exist_ok=True)
+                with open(mapping_file, "w") as f:
+                    json.dump(pl_config, f, indent=4)
+                # Piccola notifica toast (opzionale) o rerun per aggiornare stato?
+                # st.toast("Mappatura salvata!") 
+
 
         st.markdown("---")
-        st.caption("v1.0 · Streamlit + Spotipy + Gemini")
+        st.caption("v1.1 · Streamlit + Spotipy + Gemini")
 
     # Pipeline principale
     # authenticate()  <-- Spostato sopra

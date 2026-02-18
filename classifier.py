@@ -12,7 +12,8 @@ from datetime import datetime
 YEAR_PLAYLISTS: dict[str, tuple[int, int]] = {
     "📅 2020 - Oggi":          (2020, datetime.now().year),
     "🗓️ 2010 - 2019":         (2010, 2019),
-    "📼 Pre-2010 Classics":   (0,    2009),
+    "� 2000 - 2009":          (2000, 2009),
+    "📼 Pre-2000 Classics":   (0,    1999),
 }
 
 # ── Playlist per GENERE / MOOD (gestite da Gemini) ─────────────────────
