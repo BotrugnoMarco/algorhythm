@@ -432,9 +432,9 @@ def create_playlists(mode="all"):
 def show_dashboard():
     """Mostra grafici e statistiche sulla libreria."""
     tracks = st.session_state["tracks"]
-    year_buckets = st.session_state["year_buckets"]
-    genre_buckets = st.session_state["genre_buckets"]
-    classifications = st.session_state["classifications"]
+    year_buckets = st.session_state.get("year_buckets", {})
+    genre_buckets = st.session_state.get("genre_buckets", {})
+    classifications = st.session_state.get("classifications", {})
 
     st.markdown("---")
     st.markdown("## 📈 Dashboard – La tua libreria in numeri")
