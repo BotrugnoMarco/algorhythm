@@ -51,6 +51,15 @@ else
     echo "   Nessun processo attivo trovato da terminare."
 fi
 
+# 3.5 Pulizia Cache (per evitare conflitti di token/scope)
+echo ""
+echo "[3.5/4] 🧹 Pulizia Cache..."
+rm -f .spotify_cache
+rm -rf __pycache__
+# Opzionale: decommentare se si vuole resettare anche la cache dei brani
+# rm -rf user_data/tracks_*.json 
+echo "   Cache rimossa."
+
 # 4. Start Nuovo Processo
 echo ""
 echo "[4/4] 🚀 Avvio AlgoRhythm..."
