@@ -154,7 +154,7 @@ def get_or_create_playlist(sp: spotipy.Spotify,
     new_pl = sp.user_playlist_create(
         user=user_id,
         name=name,
-        public=False,
+        public=True,
         description=description,
     )
     return new_pl["id"]
