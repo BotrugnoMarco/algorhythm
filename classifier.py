@@ -3,22 +3,30 @@ classifier.py
 ──────────────
 Logica matematica per la classificazione per decadi
 e orchestratore che unisce regole temporali + output AI.
+Gestisce anche il caricamento/salvataggio delle impostazioni (categorie).
 """
 
+import json
+import os
 from datetime import datetime
 
-# ── Playlist per DECADI (logica matematica) ────────────────────────────
+SETTINGS_DIR = "user_data"
+if not os.path.exists(SETTINGS_DIR):
+    os.makedirs(SETTINGS_DIR)
+    
+SETTINGS_FILE = os.path.join(SETTINGS_DIR, "settings.json")
 
-YEAR_PLAYLISTS: dict[str, tuple[int, int]] = {
+
+# ── DEFAULTS ───────────────────────────────────────────────────────────
+
+DEFAULT_YEAR_PLAYLISTS = {
     "📅 2020 - Oggi":          (2020, datetime.now().year),
     "🗓️ 2010 - 2019":         (2010, 2019),
-    "� 2000 - 2009":          (2000, 2009),
+    "💿 2000 - 2009":          (2000, 2009),
     "📼 Pre-2000 Classics":   (0,    1999),
 }
 
-# ── Playlist per GENERE / MOOD (gestite da Gemini) ─────────────────────
-
-GENRE_PLAYLISTS: list[str] = [
+DEFAULT_GENRE_PLAYLISTS = [
     "🤪 Meme, Sigle & Trash",
     "🎸 Indie ma non è un gioco",
     "🇮🇹 Pop & Cantautorato ITA",
@@ -33,6 +41,46 @@ GENRE_PLAYLISTS: list[str] = [
 ]
 
 
+# ── SETTINGS MANAGEMENT ────────────────────────────────────────────────
+
+def load_settings():
+    """Carica le impostazioni da file o usa i default."""
+    genres = DEFAULT_GENRE_PLAYLISTS.copy()
+    years = DEFAULT_YEAR_PLAYLISTS.copy()
+
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            # Se nel file ci sono chiavi, usale
+            if "GENRE_PLAYLISTS" in data:
+                genres = data["GENRE_PLAYLISTS"]
+            
+            # I tuple in JSON diventano liste, li riconvertiamo in tuple
+            if "YEAR_PLAYLISTS" in data:
+                raw_years = data["YEAR_PLAYLISTS"]
+                years = {k: tuple(v) for k, v in raw_years.items()}
+                
+        except Exception as e:
+            print(f"Errore caricamento settings: {e}")
+            # Fallback ai default se il file è corrotto
+
+    return genres, years
+
+def save_settings_to_file(genres, years):
+    """Salva le impostazioni su file."""
+    data = {"GENRE_PLAYLISTS": genres, "YEAR_PLAYLISTS": years}
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+# Caricamento iniziale (Global variables accessible by other modules)
+# Questa chiamata avverrà all'importazione del modulo.
+GENRE_PLAYLISTS, YEAR_PLAYLISTS = load_settings()
+
+
+# ── LOGIC ──────────────────────────────────────────────────────────────
+
 def classify_by_year(track: dict) -> str | None:
     """
     Assegna una traccia alla playlist temporale corretta
@@ -44,56 +92,12 @@ def classify_by_year(track: dict) -> str | None:
     if year <= 0:
         return None
 
+    # Iteriamo su YEAR_PLAYLISTS (che potrebbe essere cambiato tramite reload)
+    # Se serve dinamismo perfetto, potremmo richiamare load_settings() qui,
+    # ma per performance e semplicità, ci affidiamo alle globali (streamlet ricarica lo script).
+    
     for playlist_name, (start, end) in YEAR_PLAYLISTS.items():
         if start <= year <= end:
             return playlist_name
+            
     return None
-
-
-def build_year_buckets(tracks: list[dict]) -> dict[str, list[dict]]:
-    """
-    Raggruppa tutte le tracce nelle tre playlist temporali.
-
-    Ritorna
-    -------
-    dict  { nome_playlist: [tracce ...] }
-    """
-    buckets: dict[str, list[dict]] = {name: [] for name in YEAR_PLAYLISTS}
-
-    for t in tracks:
-        pl = classify_by_year(t)
-        if pl:
-            buckets[pl].append(t)
-
-    return buckets
-
-
-def build_genre_buckets(tracks: list[dict],
-                        classifications: dict[str, list[str]]) -> dict[str, list[dict]]:
-    """
-    Raggruppa le tracce nei bucket di genere/mood usando
-    la mappa restituita da Gemini.
-
-    Ogni traccia può apparire in 1 o 2 playlist di genere.
-
-    Parametri
-    ---------
-    tracks : list[dict]
-        Lista completa delle tracce.
-    classifications : dict[str, list[str]]
-        Mappa  { "Artist - Title": ["cat1", "cat2"] }  prodotta da Gemini.
-
-    Ritorna
-    -------
-    dict  { nome_playlist: [tracce ...] }
-    """
-    buckets: dict[str, list[dict]] = {name: [] for name in GENRE_PLAYLISTS}
-
-    for t in tracks:
-        label = t["label"]
-        genres = classifications.get(label, [])
-        for genre in genres:
-            if genre in buckets:
-                buckets[genre].append(t)
-
-    return buckets

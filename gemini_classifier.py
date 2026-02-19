@@ -9,10 +9,9 @@ import os
 import json
 import time
 import logging
-from dotenv import load_dotenv
 import google.generativeai as genai
-
-from classifier import GENRE_PLAYLISTS
+import classifier
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -21,196 +20,133 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Utilizziamo l'alias "flash-latest" presente nella tua lista. 
-# È la scelta più sicura per il Free Tier (solitamente punta a 1.5 Flash).
-MODEL_NAME = "models/gemini-flash-latest" 
-BATCH_SIZE = 10           # Flash gestisce bene batch più grandi
-MAX_RETRIES = 5           
-RETRY_DELAY = 10
+MODEL_NAME = "models/gemini-1.5-flash"  # Aggiornato a 1.5-flash esplicito
+BATCH_SIZE = 15
+MAX_RETRIES = 3
+RETRY_DELAY = 5
 
 
-# ── Prompt di sistema ──────────────────────────────────────────────────
+# ── Costruzione Prompt Dinamico ────────────────────────────────────────
 
-SYSTEM_PROMPT = """Sei un esperto musicale e classificatore di brani.
+def get_system_prompt() -> str:
+    """Genera il prompt di sistema basandosi sulle categorie attuali."""
+    
+    # Ricarica settings attuali
+    current_genres, _ = classifier.load_settings()
+    
+    # Formatta elenco numerato
+    categories_text = "\n".join([f'{i+1}. "{genre}"' for i, genre in enumerate(current_genres)])
+
+    return f"""Sei un esperto musicale e classificatore di brani.
 Ti verrà fornita una lista di brani nel formato "Artista - Titolo".
 
-Gemini must assign each track to 1, or MAXIMUM 2 relevant categories.
-The JSON output must use an array of strings for the "categories" key, like this:
-{"track": "Artist - Title", "categories": ["Category 1", "Category 2"]}
+Compito:
+Assegna ogni brano a 1 o MASSIMO 2 categorie tra quelle elencate sotto.
 
-Le categorie disponibili sono:
+Categorie Disponibili:
+{categories_text}
 
-1. "🤪 Meme, Sigle & Trash" — Sigle di cartoni animati, canzoni troll, inni meme, brani trash/divertenti
-2. "🎸 Indie ma non è un gioco" — Indie Rock, Indie Pop, Alternative, Indie italiano / Itpop
-3. "🇮🇹 Pop & Cantautorato ITA" — Musica italiana classica e Pop italiano (ESCLUSI Indie e Rap italiani)
-4. "🌍 Pop & Radio Hits" — Pop mainstream, hit internazionali, Synthpop
-5. "🎸 Guitar Anthems" — Classic Rock, Hard Rock, Metal (ESCLUSO Indie)
-6. "🏙️ Concrete Jungle" — Rap, Trap, Hip Hop, R&B, Urban
-7. "🪩 Club Life" — House, Techno, EDM, Dance
-8. "💔 Deep & Emotional" — Canzoni tristi, ballad emozionali
-9. "⚡ High Voltage" — Brani ad alta energia / workout che non rientrano nelle categorie precedenti
-10. "🍃 Chill State of Mind" — Musica rilassante, lo-fi, acustica, sottofondo
-
-REGOLE IMPORTANTI:
-- Ogni brano va in 1 o MASSIMO 2 categorie.
-- I brani Indie NON vanno in "Guitar Anthems".
-- **REGOLA SPECIALE ITALIA**: Se l'artista o il brano è italiano, DEVI inserirlo ANCHE nella categoria "🇮🇹 Pop & Cantautorato ITA", oltre alla sua categoria di genere (es. Rap, Indie, Rock). Questa categoria "extra" non conta nel limite.
-- Rispondi SOLO con il JSON richiesto, senza testo aggiuntivo."""
-
+Regole Output:
+1. Restituisci SOLO un array JSON di oggetti.
+2. Formato oggetto: {{"track": "Artist - Title", "categories": ["Category A", "Category B"]}}
+3. NON usare markdown (no ```json).
+4. Se nessuno delle categorie è perfetta, scegli la categoria "Altro" se esiste o la più adeguata.
+5. Sii preciso e veloce.
+"""
 
 def _build_user_prompt(labels: list[str]) -> str:
     """Costruisce il prompt utente con la lista di brani numerata."""
     numbered = "\n".join(f"{i+1}. {lbl}" for i, lbl in enumerate(labels))
     return (
-        f"Classifica i seguenti {len(labels)} brani. "
-        f"Rispondi con un array JSON di oggetti, ognuno con le chiavi "
-        f'"track" (stringa esatta del brano) e "categories" (array di stringhe).\n\n'
-        f"{numbered}"
+        f"Classifica questi {len(labels)} brani:\n\n"
+        f"{numbered}\n\n"
+        f"Rispondi SOLO con il JSON array."
     )
 
 
 # ── Client Gemini ─────────────────────────────────────────────────────
 
 def _init_model() -> genai.GenerativeModel:
-    """Inizializza il modello Gemini con configurazione JSON."""
-    logger.info(f"Inizializzazione modello Gemini: {MODEL_NAME}")
+    """Inizializza il modello Gemini."""
     genai.configure(api_key=GEMINI_API_KEY)
+    
+    # Recupera prompt aggiornato
+    system_instruction = get_system_prompt()
+    
     return genai.GenerativeModel(
         model_name=MODEL_NAME,
-        system_instruction=SYSTEM_PROMPT,
+        system_instruction=system_instruction,
         generation_config=genai.GenerationConfig(
-            # Gemini Pro 1.0 gestisce meglio il JSON via prompt che via config
-            # response_mime_type="application/json", 
-            temperature=0.2,
+            temperature=0.3,
+            response_mime_type="application/json"
         ),
     )
 
 
 def _classify_batch(model: genai.GenerativeModel,
                     labels: list[str]) -> dict[str, list[str]]:
-    """
-    Invia un singolo batch di label a Gemini e restituisce
-    la mappa { "Artist - Title": ["cat1", "cat2"] }.
-
-    Gestisce retry con backoff in caso di errori temporanei.
-    """
+    """Invia un batch a Gemini."""
     prompt = _build_user_prompt(labels)
-    valid_categories = set(GENRE_PLAYLISTS)
+    
+    track_map: dict[str, list[str]] = {}
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             response = model.generate_content(prompt)
             raw_text = response.text.strip()
+            
+            # Pulizia MD se presente
             if raw_text.startswith("```"):
-                lines = raw_text.splitlines()
-                # Rimuove prima e ultima riga se sono marcatori
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                raw_text = "\n".join(lines).strip()
+                raw_text = raw_text.strip("`").replace("json\n", "").strip()
 
-            # P
-            # Parse JSON — ci aspettiamo una lista di oggetti
             parsed = json.loads(raw_text)
 
-            # Normalizza: accetta sia lista di oggetti che dict piatto
-            track_map: dict[str, list[str]] = {}
+            # Normalizzazione output da lista di oggetti a track_map
             if isinstance(parsed, list):
                 for item in parsed:
                     track = item.get("track", "")
                     cats = item.get("categories", [])
-                    if isinstance(cats, str):
-                        cats = [cats]
-                    track_map[track] = cats[:4]  # max 4 per sicurezza
-            elif isinstance(parsed, dict):
-                for track, cats in parsed.items():
-                    if isinstance(cats, str):
-                        cats = [cats]
-                    if isinstance(cats, list):
-                        track_map[track] = cats[:4]
+                    if isinstance(cats, str): cats = [cats]
+                    
+                    if track:
+                        track_map[track] = cats
+            
+            return track_map
 
-            # Validazione categorie
-            result: dict[str, list[str]] = {}
-            for label in labels:
-                raw_cats = track_map.get(label, [])
-                validated: list[str] = []
-                for cat in raw_cats:
-                    if cat in valid_categories:
-                        validated.append(cat)
-                    else:
-                        matched = _fuzzy_match_category(cat, valid_categories)
-                        if matched:
-                            validated.append(matched)
-                if not validated:
-                    logger.warning(
-                        "Nessuna categoria valida per '%s' → default", label
-                    )
-                    validated = ["⚠️ To Review"]
-                result[label] = validated
-
-            return result
-
-        except json.JSONDecodeError as e:
-            logger.warning("Tentativo %d/%d – JSON non valido: %s",
-                           attempt, MAX_RETRIES, e)
         except Exception as e:
-            logger.warning("Tentativo %d/%d – Errore Gemini: %s",
-                           attempt, MAX_RETRIES, e)
-
-        if attempt < MAX_RETRIES:
-            time.sleep(RETRY_DELAY * attempt)  # backoff lineare
-
-    # Se tutti i tentativi falliscono, assegna un fallback
-    logger.error("Tutti i tentativi falliti per il batch. Uso fallback.")
-    return {label: ["⚠️ To Review"] for label in labels}
+            logger.warning(f"Batch fallito (tentativo {attempt}): {e}")
+            time.sleep(RETRY_DELAY)
+    
+    return track_map
 
 
-def _fuzzy_match_category(candidate: str | None,
-                          valid: set[str]) -> str | None:
+# ── Public API ────────────────────────────────────────────────────────
+
+def classify_all_tracks(tracks: list[str], progress_callback=None) -> dict[str, list[str]]:
     """
-    Tenta un match approssimativo se Gemini restituisce la
-    categoria con lievi differenze (es. senza emoji).
-    """
-    if candidate is None:
-        return None
-    candidate_lower = candidate.lower().strip()
-    for v in valid:
-        # Confronto senza emoji (primi 2-4 caratteri possono essere emoji)
-        v_text = v.split(" ", 1)[-1].lower() if " " in v else v.lower()
-        if v_text in candidate_lower or candidate_lower in v_text:
-            return v
-    return None
-
-
-# ── Funzione pubblica ─────────────────────────────────────────────────
-
-def classify_all_tracks(tracks: list[dict]):
-    """
-    Generatore che classifica le tracce in batch.
-    Yielda (batch_index, total_batches, partial_results) ad ogni step.
-    Permette al chiamante di controllare il loop e aggiornare la UI.
+    Classifica una lista completa di brani "Artist - Title".
     """
     model = _init_model()
-
-    labels = [t["label"] for t in tracks]
-    total_batches = (len(labels) + BATCH_SIZE - 1) // BATCH_SIZE
+    results = {}
+    total = len(tracks)
     
-    for i in range(0, len(labels), BATCH_SIZE):
-        batch = labels[i : i + BATCH_SIZE]
-        batch_num = i // BATCH_SIZE + 1
-
-        logger.info("Classifico batch %d/%d (%d brani)…",
-                     batch_num, total_batches, len(batch))
-
-        # Esegue la classificazione del batch
-        batch_result = _classify_batch(model, batch)
+    # Batch processing
+    for i in range(0, total, BATCH_SIZE):
+        batch = tracks[i : i + BATCH_SIZE]
         
-        # Restituisce il controllo al chiamante
-        yield batch_num, total_batches, batch_result
-
-        # Rate-limiting gentile tra batch
-        # Aumentato drasticamente per Free Tier (evita 429 Quota Exceeded)
-        if i + BATCH_SIZE < len(labels):
-            time.sleep(10)
+        # Aggiorna progress bar
+        if progress_callback:
+            progress_callback(i, total)
+            
+        batch_results = _classify_batch(model, batch)
+        if batch_results:
+            results.update(batch_results)
+        
+        # Rate limit safety per Free Tier
+        time.sleep(1.0)
+        
+    if progress_callback:
+        progress_callback(total, total)
+        
+    return results
 
