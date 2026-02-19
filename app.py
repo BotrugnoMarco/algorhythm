@@ -430,8 +430,7 @@ def create_playlists(mode="all"):
                 st.session_state.clear()
                 st.rerun()
             st.stop()
-        else:
-            raise e
+
 
     pl_progress.progress(1.0, text="✅ Operazione completata!")
     
