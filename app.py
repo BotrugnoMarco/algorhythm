@@ -72,11 +72,16 @@ def authenticate():
     auth_manager = get_auth_manager()
 
     # 2. Controllo: siamo in fase di callback?
-    query_params = st.query_params
+    # Usiamo st.query_params (nuovo) o st.experimental_get_query_params (vecchio) per compatibilità
+    try:
+        query_params = st.query_params
+    except AttributeError:
+        query_params = st.experimental_get_query_params()
+        
     if "code" in query_params:
         code = query_params["code"]
         
-        # Gestione caso in cui il code sia una lista (comportamento vario versioni streamlit)
+        # Streamlit a volte restituisce lista, a volte stringa
         if isinstance(code, list):
             code = code[0]
             
@@ -84,23 +89,25 @@ def authenticate():
             # Scambia il codice per il token
             token_info = auth_manager.get_access_token(code)
             
-            # Verifica
+            # Verifica cache
             if auth_manager.get_cached_token():
                  st.success("Login riuscito! Ricarico...")
-                 # Pulisci query params rimuovendo 'code'
-                 if "code" in st.query_params:
-                     del st.query_params["code"]
+                 # Pulisci query params
+                 st.query_params.clear()
                  st.rerun()
             else:
-                 st.error("Errore critico: Il token non è stato salvato nella cache.")
+                 st.error("Errore: Token non salvato. Controlla i permessi di scrittura nella cartella.")
                  st.stop()
                  
         except Exception as e:
-            # Se il codice è vecchio o invalido, puliamolo e riproviamo
-            if "code" in st.query_params:
-                 del st.query_params["code"]
-            st.warning(f"Codice scaduto o errore auth ({e}). Riprova a connetterti.")
-            st.rerun()
+            # Se errore, puliamo per evitare loop
+            st.query_params.clear()
+            st.error(f"Errore durante l'autenticazione: {e}")
+            st.warning("Prova a cancellare i cookie o i file di cache (.spotify_cache) se il problema persiste.")
+            # Non facciamo rerun automatico per far leggere l'errore
+            if st.button("Riprova Login"):
+                st.rerun()
+            st.stop()
             
     # 3. Istanzia client
     sp = get_spotify_client(auth_manager)
