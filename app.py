@@ -576,16 +576,21 @@ def show_dashboard():
 
     # ── TABELLA – Riepilogo playlist ──
     with right2:
-        st.markdown("### 📋 Riepilogo Playlist Create")
-        if "created_info" in st.session_state:
+        st.markdown("### 📋 Riepilogo playlist create")
+        if "created_info" in st.session_state and st.session_state["created_info"]:
             info_df = pd.DataFrame(st.session_state["created_info"])
-            info_df = info_df.sort_values("Brani", ascending=False).reset_index(drop=True)
+            
+            if not info_df.empty and "Brani" in info_df.columns:
+                info_df = info_df.sort_values("Brani", ascending=False).reset_index(drop=True)
+            
             info_df.index += 1
             st.dataframe(
                 info_df,
                 use_container_width=True,
                 height=450,
             )
+        else:
+            st.info("Nessuna informazione sulle playlist create.")
 
     # ── Multi-genere stats ──
     multi_genre_count = sum(
