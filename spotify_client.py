@@ -204,6 +204,15 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         real_user_id = sp.current_user()["id"]
         print(f"DEBUG: Creazione playlist per REAL user_id='{real_user_id}' (passato: '{user_id}')")
         
+        # FIX: Usa endpoint specifico user_playlist_create con user id esplicito
+        # Se fallisce ancora, potrebbe essere un problema di scopes, proviamo a loggare gli scopes attuali
+        try:
+            current_token = sp.auth_manager.get_cached_token()
+            if current_token:
+                print(f"DEBUG: Scopes attuali nel token: {current_token.get('scope')}")
+        except:
+            pass
+
         new_pl = sp.user_playlist_create(
             user=real_user_id,
             name=name,

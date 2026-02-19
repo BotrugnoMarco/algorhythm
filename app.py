@@ -108,7 +108,8 @@ def authenticate():
     if "code" in query_params:
         try:
             # Scambia il codice per il token
-            auth_manager.get_access_token(query_params["code"])
+            # as_dict=False rimuove il warning, ma dobbiamo gestire il return
+            auth_manager.get_access_token(query_params["code"], as_dict=False)
             # Pulisci l'URL per evitare riutilizzo del codice
             st.query_params.clear()
         except Exception as e:
@@ -545,7 +546,7 @@ def show_dashboard():
                 margin=dict(t=20, b=20, l=20, r=20),
                 height=420,
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie)
 
     # ── BAR CHART – Decadi ──
     with right:
@@ -574,7 +575,7 @@ def show_dashboard():
                 margin=dict(t=20, b=20),
                 height=420,
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar)
 
     # ── BAR CHART – Distribuzione per anno ──
     st.markdown("### 📆 Distribuzione per Anno di Uscita")
@@ -599,7 +600,7 @@ def show_dashboard():
         fig_years.update_traces(
             hovertemplate="<b>%{x}</b><br>%{y} brani<extra></extra>"
         )
-        st.plotly_chart(fig_years, use_container_width=True)
+        st.plotly_chart(fig_years)
 
     # ── HORIZONTAL BAR – Top 15 Artisti ──
     left2, right2 = st.columns(2)
@@ -621,7 +622,7 @@ def show_dashboard():
             margin=dict(t=20, b=20, l=10),
             height=450,
         )
-        st.plotly_chart(fig_artists, use_container_width=True)
+        st.plotly_chart(fig_artists)
 
     # ── TABELLA – Riepilogo playlist ──
     with right2:
