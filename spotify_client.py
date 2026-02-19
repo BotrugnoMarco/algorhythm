@@ -222,17 +222,8 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         return new_pl["id"]
     except Exception as e:
         print(f"ERRORE CREAZIONE PLAYLIST: {e}")
-        # Riprova facendo una fetch fresca dell'user id
-        me = sp.me()
-        real_id = me['id']
-        print(f"DEBUG: Riprovo con user_id fresco da API: '{real_id}'")
-        new_pl = sp.user_playlist_create(
-            user=real_id,
-            name=name,
-            public=False,
-            description=description,
-        )
-        return new_pl["id"]
+        # Rilancia eccezione per permettere all'app di intercettarla
+        raise e
 
 
 def add_tracks_to_playlist(sp: spotipy.Spotify,
