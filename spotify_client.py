@@ -18,7 +18,7 @@ SCOPES = "user-library-read playlist-read-private playlist-read-collaborative pl
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI",
-                                  "http://127.0.0.1:8888/callback")
+                                  "http://localhost:8501")
 
 
 def get_auth_manager(cache_path: str = ".spotify_cache") -> SpotifyOAuth:
@@ -31,9 +31,9 @@ def get_auth_manager(cache_path: str = ".spotify_cache") -> SpotifyOAuth:
         client_secret=SPOTIFY_CLIENT_SECRET,
         redirect_uri=SPOTIFY_REDIRECT_URI,
         scope=SCOPES,
-        cache_path=cache_path,
+        cache_path=os.path.abspath(cache_path),  # Usa path assoluto per evitare problemi
         show_dialog=True,
-        open_browser=False,  # IMPORTANTE per server/deploy
+        open_browser=False,
     )
 
 def get_spotify_client(auth_manager: SpotifyOAuth = None) -> spotipy.Spotify | None:
