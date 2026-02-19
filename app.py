@@ -41,6 +41,19 @@ st.set_page_config(
 
 def check_access_password():
     """Mostra una schermata di login che chiede una KEY di accesso."""
+    
+    # Se ci sono parametri di callback OAuth (code), SALTIAMO il controllo password temporaneamente
+    # per permettere alla funzione authenticate() di scambiare il token.
+    # Al reload successivo (senza code), chiederemo di nuovo la password se necessario,
+    # oppure potremmo decidere di fidarci del token spotify.
+    try:
+        query_params = st.query_params
+    except AttributeError:
+        query_params = st.experimental_get_query_params()
+        
+    if "code" in query_params:
+        return
+
     # Se la chiave è in sessione, continua
     if st.session_state.get("access_granted", False):
         return
