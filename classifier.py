@@ -45,8 +45,8 @@ DEFAULT_GENRE_PLAYLISTS = [
 
 def load_settings():
     """Carica le impostazioni da file o usa i default."""
-    genres = DEFAULT_GENRE_PLAYLISTS.copy()
-    years = DEFAULT_YEAR_PLAYLISTS.copy()
+    genres = list(DEFAULT_GENRE_PLAYLISTS)
+    years = dict(DEFAULT_YEAR_PLAYLISTS)
 
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -91,13 +91,70 @@ def classify_by_year(track: dict) -> str | None:
     year = track.get("release_year", 0)
     if year <= 0:
         return None
-
-    # Iteriamo su YEAR_PLAYLISTS (che potrebbe essere cambiato tramite reload)
-    # Se serve dinamismo perfetto, potremmo richiamare load_settings() qui,
-    # ma per performance e semplicità, ci affidiamo alle globali (streamlet ricarica lo script).
+    
+    # Reload settings on the fly if needed, here we use globals
+    # Assuming runtime reload updates GENRE_PLAYLISTS/YEAR_PLAYLISTS if desired.
+    # But streamlit likely reloads module on change anyway.
     
     for playlist_name, (start, end) in YEAR_PLAYLISTS.items():
         if start <= year <= end:
             return playlist_name
             
     return None
+
+
+def build_year_buckets(tracks: list[dict]) -> dict[str, list[dict]]:
+    """
+    Raggruppa le tracce per playlist annuale.
+    Ritorna { "Nome Playlist": [track_dict, ...], ... }
+    """
+    # Inizializza buckets vuoti per le chiavi definite in YEAR_PLAYLISTS
+    buckets = {name: [] for name in YEAR_PLAYLISTS.keys()}
+    
+    for t in tracks:
+        p_name = classify_by_year(t)
+        if p_name:
+            if p_name not in buckets:
+                 buckets[p_name] = []
+            buckets[p_name].append(t)
+            
+    return buckets
+
+
+def build_genre_buckets(tracks: list[dict], ai_results: dict[str, list[str]]) -> dict[str, list[dict]]:
+    """
+    Raggruppa le tracce per genere usando i risultati dell'AI.
+    Ritorna { "Nome Genre Playlist": [track_dict, ...], ... }
+    """
+    # Inizializza buckets vuoti per le chiavi definite in GENRE_PLAYLISTS
+    buckets = {name: [] for name in GENRE_PLAYLISTS}
+    if "⚠️ To Review" not in buckets:
+        buckets["⚠️ To Review"] = [] # Assicura che esista una fallback
+
+    for t in tracks:
+        # Recupera label usata per AI
+        label = t.get("label", "")
+        if not label:
+            # Fallback se label mancante
+            label = f"{t.get('artist', 'Unknown')} - {t.get('name', 'Unknown')}"
+            
+        categories = ai_results.get(label, [])
+        
+        # Se nessuna categoria trovata o lista vuota
+        if not categories:
+            buckets["⚠️ To Review"].append(t)
+            continue
+            
+        for cat in categories:
+            if cat not in buckets:
+                # Se l'AI restituisce una categoria non prevista (possibile con temperature > 0)
+                # O la scartiamo, o la creiamo al volo.
+                # Per robustezza, creiamola al volo o mettiamo in "Altro"?
+                # Creiamola al volo
+                buckets[cat] = []
+            
+            # Evita duplicati (stesso oggetto track listato 2 volte)
+            if t not in buckets[cat]:
+                buckets[cat].append(t)
+                
+    return buckets
