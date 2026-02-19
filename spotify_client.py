@@ -198,9 +198,14 @@ def get_or_create_playlist(sp: spotipy.Spotify,
 
     # Non trovata (o non scrivibile) → crea
     try:
-        print(f"DEBUG: Tentativo creazione playlist per user_id='{user_id}' con nome='{name}'")
+        # Se usiamo il metodo moderno, non serve user_id
+        # Ma user_playlist_create lo richiede.
+        # Proviamo a REFRESHARE l'user id in ogni caso
+        real_user_id = sp.current_user()["id"]
+        print(f"DEBUG: Creazione playlist per REAL user_id='{real_user_id}' (passato: '{user_id}')")
+        
         new_pl = sp.user_playlist_create(
-            user=user_id,
+            user=real_user_id,
             name=name,
             public=False,
             description=description,
