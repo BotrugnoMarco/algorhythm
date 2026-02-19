@@ -52,13 +52,13 @@ else
 fi
 
 # 3.5 Pulizia Cache (per evitare conflitti di token/scope)
-echo ""
-echo "[3.5/4] 🧹 Pulizia Cache..."
-rm -f .spotify_cache
-rm -rf __pycache__
+# echo ""
+# echo "[3.5/4] 🧹 Pulizia Cache..."
+# rm -f .spotify_cache
+# rm -rf __pycache__
 # Opzionale: decommentare se si vuole resettare anche la cache dei brani
 # rm -rf user_data/tracks_*.json 
-echo "   Cache rimossa."
+# echo "   Cache rimossa."
 
 # 4. Start Nuovo Processo
 echo ""

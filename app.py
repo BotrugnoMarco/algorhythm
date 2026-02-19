@@ -340,6 +340,50 @@ def _show_ai_interface(tracks):
 
 
 
+def _save_created_history(new_entries):
+    """Salva la lista delle playlist create in un file JSON locale."""
+    try:
+        user = st.session_state.get("user", {})
+        user_id = user.get("id", "unknown_user")
+        hist_file = f"user_data/history_{user_id}.json"
+        
+        # Carica esistente
+        existing = []
+        if os.path.exists(hist_file):
+            with open(hist_file, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        
+        # Aggiungi nuove (evitando duplicati esatti di nome)
+        # Nota: sovrascriviamo se il nome esiste già per aggiornare il conteggio brani
+        existing_map = {item["Playlist"]: item for item in existing}
+        
+        for entry in new_entries:
+            existing_map[entry["Playlist"]] = entry  # Aggiorna o aggiungi
+            
+        final_list = list(existing_map.values())
+        
+        with open(hist_file, "w", encoding="utf-8") as f:
+            json.dump(final_list, f, indent=2)
+            
+    except Exception as e:
+        print(f"Errore salvataggio history: {e}")
+
+def _load_created_history():
+    """Carica la history dal disco se la sessione è vuota."""
+    if "created_info" not in st.session_state:
+        user = st.session_state.get("user", {})
+        user_id = user.get("id", "unknown_user")
+        hist_file = f"user_data/history_{user_id}.json"
+        
+        if os.path.exists(hist_file):
+            try:
+                with open(hist_file, "r", encoding="utf-8") as f:
+                    st.session_state["created_info"] = json.load(f)
+            except:
+                st.session_state["created_info"] = []
+        else:
+            st.session_state["created_info"] = []
+
 # ══════════════════════════════════════════════════════════════════════
 #  FASE 4 – Creazione playlist su Spotify
 # ══════════════════════════════════════════════════════════════════════
@@ -404,6 +448,8 @@ def create_playlists(mode="all"):
             # Aggiungi alla lista solo se non c'è già (per evitare duplicati in report)
             if not any(x["Playlist"] == name for x in created_info):
                 created_info.append({"Playlist": name, "Brani": len(bucket)})
+                # Aggiorna session state progressivamente per evitare perdite
+                st.session_state["created_info"] = created_info
     
     except SpotifyException as e:
         if e.http_status == 403:
@@ -436,6 +482,9 @@ def create_playlists(mode="all"):
     
     st.session_state["playlists_created"] = True
     st.session_state["created_info"] = created_info
+    
+    # Salva su disco per visualizzare dopo il riavvio
+    _save_created_history(created_info)
 
     st.success("Playlist aggiornate con successo! 🎧")
 
@@ -577,13 +626,23 @@ def show_dashboard():
     # ── TABELLA – Riepilogo playlist ──
     with right2:
         st.markdown("### 📋 Riepilogo playlist create")
-        if "created_info" in st.session_state and st.session_state["created_info"]:
-            info_df = pd.DataFrame(st.session_state["created_info"])
+        
+        # Recupero info, se esiste
+        c_info = st.session_state.get("created_info", [])
+        
+        if c_info:
+            info_df = pd.DataFrame(c_info)
             
+            # Controllo se il dataframe ha dati e le colonne giuste
             if not info_df.empty and "Brani" in info_df.columns:
-                info_df = info_df.sort_values("Brani", ascending=False).reset_index(drop=True)
+                try:
+                    info_df = info_df.sort_values("Brani", ascending=False).reset_index(drop=True)
+                except Exception as e:
+                    st.warning(f"Impossibile ordinare la tabella: {e}")
             
+            # Aggiusta indice per visualizzazione (parte da 1)
             info_df.index += 1
+            
             st.dataframe(
                 info_df,
                 use_container_width=True,
@@ -785,12 +844,24 @@ def main():
 
     # Se le playlist sono già state create, mostra la dashboard
     if "playlists_created" in st.session_state:
+        # Assicurati che lo storico sia caricato
+        _load_created_history()
         show_dashboard()
     else:
-        # Altrimenti mostra l'interfaccia di classificazione interattiva
-        # Sarà classify_tracks a mostrare il bottone "Crea Playlist" quando pronto
-        st.markdown("---")
-        classify_tracks()
+        # Controlla se abbiamo uno storico precedente su disco
+        _load_created_history()
+        if st.session_state.get("created_info"):
+             # Se c'è storico, mostriamo la dashboard
+             st.session_state["playlists_created"] = True
+             show_dashboard()
+             # Opzionale: mostrare comunque il tasto per crearne altre in fondo
+             st.markdown("---")
+             st.subheader("🛠️ Crea Nuove Playlist")
+             classify_tracks()
+        else:
+             # Altrimenti mostra l'interfaccia di classificazione interattiva
+             st.markdown("---")
+             classify_tracks()
 
 if __name__ == "__main__":
     main()
