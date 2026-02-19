@@ -4,8 +4,16 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import sys
+import os
 
-st.set_page_config(page_title="Dashboard", page_icon="📈", layout="wide")
+# Aggiungi root al path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from sidebar import render_sidebar
+
+st.set_page_config(page_title="Music Dashboard", page_icon="📈", layout="wide")
+
+render_sidebar()
 
 if "sp" not in st.session_state:
     st.warning("⚠️ Non sei autenticato. Torna alla Home page per fare il login.")

@@ -5,6 +5,12 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import sys
+
+# Aggiungi root al path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from sidebar import render_sidebar
+
 from spotify_client import (
     get_or_create_playlist,
     add_tracks_to_playlist,
@@ -18,6 +24,10 @@ from classifier import (
     YEAR_PLAYLISTS,
     GENRE_PLAYLISTS,
 )
+
+st.set_page_config(page_title="Create Playlists", page_icon="🛠️", layout="wide")
+
+render_sidebar()
 from spotipy.exceptions import SpotifyException
 
 st.set_page_config(page_title="Create Playlists", page_icon="🛠️", layout="wide")

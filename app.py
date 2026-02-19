@@ -27,6 +27,7 @@ from spotify_client import (
     fetch_all_liked_songs,
     get_all_user_playlists, 
 )
+from sidebar import render_sidebar  # Importa la funzione sidebar
 
 st.set_page_config(
     page_title="AlgoRhythm",
@@ -43,15 +44,16 @@ def check_access_password():
     """Mostra una schermata di login che chiede una KEY di accesso."""
     
     # Se ci sono parametri di callback OAuth (code), SALTIAMO il controllo password temporaneamente
-    # per permettere alla funzione authenticate() di scambiare il token.
-    # Al reload successivo (senza code), chiederemo di nuovo la password se necessario,
-    # oppure potremmo decidere di fidarci del token spotify.
+    # Utilizziamo st.query_params se disponibile
     try:
         query_params = st.query_params
     except AttributeError:
         query_params = st.experimental_get_query_params()
         
+    # Se c'è 'code' nell'URL, significa che stiamo tornando da Spotify
     if "code" in query_params:
+        # IMPORTANTE: Segnamo l'accesso come garantito temporaneamente per permettere scambio token
+        st.session_state["access_granted"] = True
         return
 
     # Se la chiave è in sessione, continua
@@ -190,32 +192,8 @@ def main():
     # 2. Autenticazione (Critica per l'accesso a tutte le pagine)
     authenticate()
 
-    # Sidebar con info utente e navigazione
-    with st.sidebar:
-        st.markdown("## 🎵 AlgoRhythm")
-        st.markdown("---")
-
-        if "user" in st.session_state:
-            user = st.session_state["user"]
-            name = user.get("display_name", user["id"])
-            st.markdown(f"👤 **{name}**")
-            
-            if st.button("🚪 Logout / Reset Cache", use_container_width=True):
-                # Rimuovi file di cache token
-                if os.path.exists(".spotify_cache"): os.remove(".spotify_cache")
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                abs_cache_path = os.path.join(base_dir, ".spotify_cache")
-                if os.path.exists(abs_cache_path): os.remove(abs_cache_path)
-
-                # Rimuovi file di cache tracce
-                track_cache_path = f"user_data/tracks_{user['id']}.json"
-                if os.path.exists(track_cache_path): os.remove(track_cache_path)
-                
-                st.session_state.clear()
-                st.rerun()
-
-            st.markdown("---")
-            st.info("👈 Usa il menu laterale per navigare tra le pagine!")
+    # Sidebar condivisa
+    render_sidebar()
 
     # 4. Fetch Tracce (necessario per tutto il resto)
     fetch_tracks()

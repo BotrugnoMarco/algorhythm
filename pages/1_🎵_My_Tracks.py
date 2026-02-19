@@ -3,13 +3,22 @@
 """
 import streamlit as st
 import pandas as pd
+import sys
+import os
+
+# Aggiungi la root del progetto al path per importare moduli dal livello superiore
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from spotify_client import fetch_all_liked_songs
+from sidebar import render_sidebar
 
 # Se l'utente arriva qui direttamente senza passare da app.py, non ha la sessione.
 # Streamlit pages funzionano condividendo session state, ma bisogna essere sicuri che 
 # l'autenticazione sia avvenuta.
 
 st.set_page_config(page_title="My Tracks", page_icon="🎵", layout="wide")
+
+render_sidebar()
 
 if "sp" not in st.session_state:
     st.warning("⚠️ Non sei autenticato. Torna alla Home page per fare il login.")
