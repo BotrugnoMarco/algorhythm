@@ -408,6 +408,14 @@ def create_playlists(mode="all"):
     except SpotifyException as e:
         if e.http_status == 403:
             st.error("🚨 ERRORE DI PERMESSI: Spotify ha rifiutato l'operazione (403 Forbidden).")
+            st.error("Sembra che manchino i permessi per creare/modificare playlist. Prova a rifare il login.")
+            if st.button("Logout e Riprova"):
+                # Pulisce sessione e cache
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
+        else:
+            st.error(f"Errore Spotify Generico: {e}")
             st.warning("⚠️ Probabilmente i permessi dell'app sono cambiati o il token è scaduto/invalido per questa operazione.")
             st.info("💡 Soluzione: Esegui il Logout dalla barra laterale (pulsante 'Logout / Reset Cache') e ri-effettua il Login.")
             if st.button("🔄 Force Logout Now", key="force_logout_error"):
