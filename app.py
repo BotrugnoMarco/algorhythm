@@ -75,6 +75,11 @@ def authenticate():
     query_params = st.query_params
     if "code" in query_params:
         code = query_params["code"]
+        
+        # Gestione caso in cui il code sia una lista (comportamento vario versioni streamlit)
+        if isinstance(code, list):
+            code = code[0]
+            
         try:
             # Scambia il codice per il token
             token_info = auth_manager.get_access_token(code)
@@ -82,15 +87,20 @@ def authenticate():
             # Verifica
             if auth_manager.get_cached_token():
                  st.success("Login riuscito! Ricarico...")
-                 st.query_params.clear()
+                 # Pulisci query params rimuovendo 'code'
+                 if "code" in st.query_params:
+                     del st.query_params["code"]
                  st.rerun()
             else:
                  st.error("Errore critico: Il token non è stato salvato nella cache.")
                  st.stop()
                  
         except Exception as e:
-            st.error(f"Errore durante l'autenticazione: {e}")
-            st.stop()
+            # Se il codice è vecchio o invalido, puliamolo e riproviamo
+            if "code" in st.query_params:
+                 del st.query_params["code"]
+            st.warning(f"Codice scaduto o errore auth ({e}). Riprova a connetterti.")
+            st.rerun()
             
     # 3. Istanzia client
     sp = get_spotify_client(auth_manager)
