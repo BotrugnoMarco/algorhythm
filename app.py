@@ -66,13 +66,21 @@ def check_access_password():
     st.stop()  # Blocca l'esecuzione finché non si inserisce la pw corretta
 
 def authenticate():
-    """Gestisce il flusso OAuth2 Web-based compatibile con server remoti."""
+    """Gestisce il flusso OAuth2 Web-based robusto."""
     
-    # 1. Recupera Auth Manager
+    # 1. Recupera Auth Manager (che punta al file .spotify_cache)
     auth_manager = get_auth_manager()
 
-    # 2. Controllo: siamo in fase di callback?
-    # Usiamo st.query_params (nuovo) o st.experimental_get_query_params (vecchio) per compatibilità
+    # 2. PRIMA di tutto: controlla se siamo GIÀ autenticati tramite cache su disco
+    # Questo permette di condividere il login tra schede diverse o riavvii
+    if auth_manager.validate_token(auth_manager.cache_handler.get_cached_token()):
+        sp = get_spotify_client(auth_manager)
+        if "sp" not in st.session_state:
+            st.session_state["sp"] = sp
+            st.session_state["user"] = sp.current_user()
+        return  # Login già valido, usciamo subito
+
+    # 3. Se non siamo autenticati, controlliamo se stiamo tornando da Spotify con un codice
     try:
         query_params = st.query_params
     except AttributeError:
@@ -80,48 +88,32 @@ def authenticate():
         
     if "code" in query_params:
         code = query_params["code"]
-        
-        # Streamlit a volte restituisce lista, a volte stringa
         if isinstance(code, list):
             code = code[0]
             
         try:
-            # Scambia il codice per il token
-            token_info = auth_manager.get_access_token(code)
+            # Scambia il codice e SALVA SU DISCO il token
+            auth_manager.get_access_token(code)
             
-            # Verifica cache
-            if auth_manager.get_cached_token():
-                 st.success("Login riuscito! Ricarico...")
-                 # Pulisci query params
-                 st.query_params.clear()
-                 st.rerun()
-            else:
-                 st.error("Errore: Token non salvato. Controlla i permessi di scrittura nella cartella.")
-                 st.stop()
-                 
-        except Exception as e:
-            # Se errore, puliamo per evitare loop
+            # Pulisci URL e ricarica
             st.query_params.clear()
-            st.error(f"Errore durante l'autenticazione: {e}")
-            st.warning("Prova a cancellare i cookie o i file di cache (.spotify_cache) se il problema persiste.")
-            # Non facciamo rerun automatico per far leggere l'errore
-            if st.button("Riprova Login"):
-                st.rerun()
-            st.stop()
+            st.toast("Autenticazione riuscita!", icon="🎉")
+            st.rerun()
             
-    # 3. Istanzia client
-    sp = get_spotify_client(auth_manager)
+        except Exception as e:
+            st.error(f"Errore scambio token: {e}")
+            st.stop()
 
-    if not sp:
-        auth_url = auth_manager.get_authorize_url()
-        st.info("🔐 **Connettiti a Spotify** per iniziare.")
-        st.link_button("🔗  Vai al Login Spotify", auth_url, type="primary", use_container_width=True)
-        st.stop()  # Ferma finché non autenticato
-
-    # 4. Auth OK → Salva in sessione
-    if "sp" not in st.session_state:
-        st.session_state["sp"] = sp
-        st.session_state["user"] = sp.current_user()
+    # 4. Caso finale: Non siamo autenticati e non abbiamo un codice. Mostriamo il link.
+    auth_url = auth_manager.get_authorize_url()
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.info("🔐 Per continuare, devi autorizzare l'app su Spotify.")
+        # target="_self" cerca di forzare l'apertura nella stessa scheda, anche se i browser moderni decidono loro
+        st.markdown(f'<a href="{auth_url}" target="_self" style="background-color:#1DB954;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;display:block;text-align:center;font-weight:bold;">🔗 ACCEDI CON SPOTIFY</a>', unsafe_allow_html=True)
+    
+    st.stop() # Ferma tutto qui finché non c'è login
 
 CACHE_DIR = "user_data"
 os.makedirs(CACHE_DIR, exist_ok=True)
