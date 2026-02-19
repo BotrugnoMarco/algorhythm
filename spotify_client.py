@@ -105,12 +105,14 @@ def fetch_all_liked_songs(sp: spotipy.Spotify,
 
             tracks.append({
                 "track_id": t["uri"],
-                "name": t["name"],
+                "track_name": t["name"],
+                "name": t["name"], # Teniamo entrambi per compatibilità
                 "artist": artist_name,
                 "artists_all": ", ".join(a["name"] for a in t["artists"]),
                 "album": t["album"]["name"],
                 "release_date": release_date,
                 "release_year": release_year,
+                "added_at": item["added_at"], # Data di aggiunta ai preferiti
                 "label": f"{artist_name} - {t['name']}",
             })
 
