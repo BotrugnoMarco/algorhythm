@@ -16,9 +16,12 @@ print(f"Cache Path: .spotify_cache_v2 (come nell'app)")
 print("-" * 30)
 
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+    client_id=os.getenv('SPOTIPY_CLIENT_ID'),
+    client_secret=os.getenv('SPOTIPY_CLIENT_SECRET'),
+    redirect_uri=os.getenv('SPOTIPY_REDIRECT_URI'),
     scope=SCOPES,
-    cache_path=".spotify_cache_v2",  # IMPORTANTE: usa la stessa cache pulita creata prima
-    open_browser=True # Nel terminale possiamo permetterci di aprire il browser se serve
+    cache_path=".spotify_cache_v2",
+    open_browser=False  # IMPORTANTE: Mettiamo False così STAMPA il link nel terminale
 ))
 
 try:
