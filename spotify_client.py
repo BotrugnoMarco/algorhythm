@@ -339,6 +339,17 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
         try:
             resp = requests.post(endpoint, headers=headers, json=payload)
             
+            # --- AGGIUNTA TENTATIVO RETRY 403 ---
+            if resp.status_code == 403:
+                logger.warning("Errore 403 Forbidden. Potrebbe essere necessario attendere qualche secondo o rinfrescare lo scope.")
+                # Non c'è molto che possiamo fare programmaticamente se lo scope è giusto ma spotify blocca.
+                # Tuttavia, a volte è un errore transitorio su playlist appena create.
+                # Aspettiamo un attimo e riproviamo 1 volta.
+                import time
+                time.sleep(2)
+                resp = requests.post(endpoint, headers=headers, json=payload)
+            # ------------------------------------
+
             if resp.status_code not in [200, 201]:
                 logger.error(f"Errore aggiunta tracce playlist: {resp.status_code} - {resp.text}")
                 raise Exception(f"Errore aggiunta tracce: {resp.status_code} - {resp.text}")
