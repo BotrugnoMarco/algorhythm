@@ -10,6 +10,7 @@ import logging
 from dotenv import load_dotenv
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+import requests 
 
 # Configurazione logging locale
 logger = logging.getLogger(__name__)
@@ -238,9 +239,51 @@ def get_or_create_playlist(sp: spotipy.Spotify,
              
         return new_pl["id"]
 
-    except spotipy.SpotifyException as e:
-        logger.error(f"❌ ERRORE SPOTIPY CREAZIONE PLAYLIST: {e}")
-        raise e
+    except Exception as e:
+        logger.error(f"❌ ERRORE SPOTIPY, TENTATIVO FALLBACK MANUALE (REQUESTS): {e}")
+
+        # --- FALLBACK MANUALE (Arma Finale) ---
+        # Se Spotipy fallisce, usiamo requests nudo e crudo come Postman
+        try:
+            token_info = sp.auth_manager.cache_handler.get_cached_token()
+            if not token_info:
+                 raise Exception("Token mancante per fallback manuale")
+            
+            access_token = token_info['access_token']
+            
+            # URL Costruito a mano
+            endpoint = f"https://api.spotify.com/v1/users/{real_user_id}/playlists"
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "name": name,
+                "description": description,
+                "public": True # Manteniamo pubblica per sicurezza
+            }
+            
+            logger.info(f"FALLBACK REQUEST: POST {endpoint} | Payload: {payload}")
+            
+            response = requests.post(endpoint, headers=headers, json=payload)
+            
+            if response.status_code in [200, 201]:
+                res_json = response.json()
+                logger.info(f"✅ Playlist creata manualmente! ID: {res_json['id']}")
+                
+                if existing_playlists_cache is not None:
+                     existing_playlists_cache.append(res_json)
+                return res_json['id']
+            else:
+                logger.error(f"❌ Errore Fallback Manuale: {response.status_code} - {response.text}")
+                # Rilancia l'originale se fallisce anche questo
+                raise e 
+
+        except Exception as e_fallback:
+             logger.critical(f"❌ FALLIMENTO TOTALE (Anche manuale): {e_fallback}")
+             raise e
 
     except Exception as e:
         logger.critical(f"❌ ERRORE CREAZIONE PLAYLIST FATALE: {e}", exc_info=True)
