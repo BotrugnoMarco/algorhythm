@@ -159,20 +159,43 @@ if st.button("🎲 Crea Playlist Vuota Casuale (Test Immediato)", type="primary"
             user_id = current_user["id"]
             
             # Parametri usati
-            params = {
-                "user": user_id,
+            token_info = auth_manager.get_cached_token()
+            access_token = token_info['access_token']
+            
+            # Simuliamo la richiesta HTTP esatta che Spotipy sta per fare
+            endpoint_url = f"https://api.spotify.com/v1/users/{user_id}/playlists"
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
                 "name": test_name,
                 "public": False,
+                "collaborative": False,
                 "description": f"Playlist di test generata casualmente il {str(uuid.uuid4())}"
             }
             
-            st.markdown("### 📋 Parametri Richiesta")
-            st.write(f"**Endpoint target:** `Start creation for: {user_id}`")
-            st.json(params)
+            st.markdown("### 🔍 Dettagli Richiesta HTTP (Simulata)")
+            st.code(f"POST {endpoint_url}", language="http")
+            
+            with st.expander("Vedi Headers Completi (incluso Token)", expanded=False):
+                st.json(headers)
+            
+            st.markdown("**Body JSON:**")
+            st.json(payload)
             
             # 2. Chiamata API
-            st.write("⏳ Invio richiesta a Spotify API...")
-            res = sp.user_playlist_create(**params)
+            st.write("⏳ Invio richiesta a Spotify API tramite Spotipy...")
+            # Usiamo kwargs espliciti per chiarezza, anche se spotipy gestisce tutto
+            res = sp.user_playlist_create(
+                user=user_id,
+                name=payload["name"],
+                public=payload["public"],
+                collaborative=payload["collaborative"],
+                description=payload["description"]
+            )
             
             # 3. Risultato
             st.markdown("### 📩 Risposta API")
