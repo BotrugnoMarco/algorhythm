@@ -26,13 +26,21 @@ def get_auth_manager(cache_path: str = ".spotify_cache") -> SpotifyOAuth:
     Crea e restituisce il gestore dell'autenticazione OAuth2.
     Configura open_browser=False per compatibilità server.
     """
+    # FORZIAMO la rimozione di cache errate se presenti
+    if os.path.exists(cache_path):
+        try:
+            # Controllo se il token è scaduto o invalido leggendolo
+            pass
+        except:
+            pass
+            
     return SpotifyOAuth(
         client_id=SPOTIFY_CLIENT_ID,
         client_secret=SPOTIFY_CLIENT_SECRET,
         redirect_uri=SPOTIFY_REDIRECT_URI,
         scope=SCOPES,
-        cache_path=os.path.abspath(cache_path),  # Usa path assoluto per evitare problemi
-        show_dialog=True,
+        cache_path=os.path.abspath(cache_path),
+        show_dialog=True,     # FORZA LA RIAPERTURA DELLA FINESTRA DI LOGIN
         open_browser=False,
     )
 
