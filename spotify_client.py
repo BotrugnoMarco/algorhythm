@@ -304,25 +304,47 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
     endpoint = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
     
     # PULIZIA ESPLICITA INIZIALE
-    # Invece di fidarci del PUT con dati, svuotiamo prima esplicitamente.
-    # Questo risolve problemi dove il PUT con dati fallisce silenziosamente o parzialmente.
-    logger.info(f"Svuotamento playlist {playlist_id}...")
-    resp_clear = requests.put(endpoint, headers=headers, json={"uris": []})
-    if resp_clear.status_code not in [200, 201]:
-        logger.warning(f"Attenzione: Svuotamento non riuscito (potrebbe essere già vuota o errore): {resp_clear.status_code}")
+    # Tentiamo di svuotare solo se necessario. Se fallisce con 403 (comune su nuove playlist vuote), ignoriamo.
+    logger.info(f"Tentativo svuotamento playlist {playlist_id}...")
+    try:
+        # Usiamo PUT per svuotare. Alcuni utenti segnalano che PUT fallisce se la playlist è nuova.
+        # Proviamo a non considerarlo errore fatale.
+        resp_clear = requests.put(endpoint, headers=headers, json={"uris": []})
+        if resp_clear.status_code not in [200, 201]:
+            logger.warning(f"Svuotamento PUT completato con status {resp_clear.status_code}. Msg: {resp_clear.text}")
+    except Exception as e:
+        logger.warning(f"Eccezione durante svuotamento (ignorata): {e}")
 
     # AGGIUNTA TRAMITE POST (APPEND) PER TUTTI I CHUNK
+    if not track_uris:
+        logger.warning(f"Nessuna traccia da aggiungere alla playlist {playlist_id}")
+        return
+
     for i in range(0, len(track_uris), chunk_size):
         chunk = track_uris[i : i + chunk_size]
         
-        payload = {"uris": chunk}
+        # Validazione URIs: devono iniziare con spotify:track:
+        valid_chunk = [uri for uri in chunk if uri and uri.startswith("spotify:track:")]
+        if len(valid_chunk) != len(chunk):
+            logger.warning(f"Rilevati URI non validi nel chunk! Filtrati {len(chunk)-len(valid_chunk)} invalidi.")
         
-        logger.info(f"Adding tracks (POST/APPEND) to playlist {playlist_id} (chunk {i//chunk_size + 1}) - {len(chunk)} tracks")
-        resp = requests.post(endpoint, headers=headers, json=payload)
+        if not valid_chunk:
+            logger.warning("Chunk vuoto dopo filtro validazione.")
+            continue
+
+        payload = {"uris": valid_chunk}
+        
+        logger.info(f"Adding tracks (POST/APPEND) to playlist {playlist_id} (chunk {i//chunk_size + 1}) - {len(valid_chunk)} tracks")
+        
+        try:
+            resp = requests.post(endpoint, headers=headers, json=payload)
             
-        if resp.status_code not in [200, 201]:
-             logger.error(f"Errore aggiunta tracce playlist: {resp.status_code} - {resp.text}")
-             raise Exception(f"Errore aggiunta tracce: {resp.status_code} - {resp.text}")
-        else:
-             logger.info(f"Chunk {i//chunk_size + 1} aggiunto con successo. Snapshot ID: {resp.json().get('snapshot_id')}")
+            if resp.status_code not in [200, 201]:
+                logger.error(f"Errore aggiunta tracce playlist: {resp.status_code} - {resp.text}")
+                raise Exception(f"Errore aggiunta tracce: {resp.status_code} - {resp.text}")
+            else:
+                logger.info(f"Chunk {i//chunk_size + 1} aggiunto con successo. Snapshot ID: {resp.json().get('snapshot_id')}")
+        except Exception as e:
+            logger.error(f"Eccezione critica durante POST tracce: {e}")
+            raise e
 
