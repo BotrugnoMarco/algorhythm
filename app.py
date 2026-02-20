@@ -15,12 +15,9 @@ from spotipy.exceptions import SpotifyException
 
 # Configurazione Logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO, # Mettiamo INFO per non intasare, ma DEBUG per spotify_client impostato nel suo file
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("app.log", mode='a', encoding='utf-8')
-    ]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
