@@ -4,6 +4,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
 import logging
+import uuid
 
 # Configurazione base
 st.set_page_config(page_title="Debug Playlist 403", layout="wide")
@@ -136,7 +137,7 @@ st.divider()
 st.subheader("3. Test Rapido (Playlist Casuale)")
 st.caption("Questo test crea immediatamente una playlist vuota con nome casuale per verificare i permessi di scrittura (scope: playlist-modify-*).")
 
-if st.button("🎲 Crea Playlist Vuota Casuale"):
+if st.button("🎲 Crea Playlist Vuota Casuale (Test Immediato)", type="primary"):
     # Genera nome casuale
     random_suffix = str(uuid.uuid4())[:8]
     test_name = f"DEBUG_TEST_{random_suffix}"
