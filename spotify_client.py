@@ -21,7 +21,7 @@ SPOTIFY_REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI",
                                   "http://localhost:8501")
 
 
-def get_auth_manager(cache_path: str = ".spotify_cache") -> SpotifyOAuth:
+def get_auth_manager(cache_path: str = ".spotify_cache_v2") -> SpotifyOAuth:
     """
     Crea e restituisce il gestore dell'autenticazione OAuth2.
     Configura open_browser=False per compatibilità server.
@@ -29,12 +29,12 @@ def get_auth_manager(cache_path: str = ".spotify_cache") -> SpotifyOAuth:
     # FORZIAMO la rimozione di cache errate se presenti
     if os.path.exists(cache_path):
         try:
-            # Controllo se il token è scaduto o invalido leggendolo
+              # Controllo preventivo, ma con il nuovo nome file dovremmo essere sicuri
             pass
         except:
             pass
             
-    return SpotifyOAuth(
+    auth_manager = SpotifyOAuth(
         client_id=SPOTIFY_CLIENT_ID,
         client_secret=SPOTIFY_CLIENT_SECRET,
         redirect_uri=SPOTIFY_REDIRECT_URI,
@@ -43,6 +43,7 @@ def get_auth_manager(cache_path: str = ".spotify_cache") -> SpotifyOAuth:
         show_dialog=True,     # FORZA LA RIAPERTURA DELLA FINESTRA DI LOGIN
         open_browser=False,
     )
+    return auth_manager
 
 def get_spotify_client(auth_manager: SpotifyOAuth = None) -> spotipy.Spotify | None:
     """
