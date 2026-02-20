@@ -234,10 +234,13 @@ def get_or_create_playlist(sp: spotipy.Spotify,
             "Content-Type": "application/json"
         }
         
+        # PROVIAMO A CREARE PRIVATA PER EVITARE PROBLEMI DI PERMESSI SULLE PUBBLICHE
+        # Spesso le app in dev mode hanno restrizioni sulle playlist pubbliche o richiedono review.
+        # Inoltre, riduce il rischio di errori 403 su account free o con restrizioni.
         payload = {
             "name": name,
             "description": description,
-            "public": True # FORZIAMO PUBBLICA SU RICHIESTA UTENTE
+            "public": False # FIX: Impostiamo a FALSE per default (privata)
         }
         
         logger.info(f"REQUEST MANUALE: POST {endpoint} | Payload: {payload}")
