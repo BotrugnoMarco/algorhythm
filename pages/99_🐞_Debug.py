@@ -35,17 +35,27 @@ with col1:
 SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-read-email ugc-image-upload"
 st.text_area("Scopes Richiesti", SCOPES, height=70, disabled=True)
 
-# 2. Gestione Autenticazione
-cache_path = ".spotify_cache_debug"
+st.write("---")
+st.write("Debug: Verifica inizializzazione OAuth...")
 
-auth_manager = SpotifyOAuth(
-    client_id=client_id,
-    client_secret=client_secret,
-    redirect_uri=redirect_uri,
-    scope=SCOPES,
-    cache_path=cache_path,
-    show_dialog=True
-)
+# 2. Gestione Autenticazione
+# NOTA: Usiamo la stessa cache dell'app principale (.spotify_cache_v2) così se il redirect
+# finisce sulla Home (app.py) e lì avviene lo scambio del token, noi lo troviamo già pronto qui.
+cache_path = ".spotify_cache_v2"
+
+try:
+    auth_manager = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=SCOPES,
+        cache_path=cache_path,
+        show_dialog=True
+    )
+    st.write("Debug: OAuth inizializzato correttamente.")
+except Exception as e:
+    st.error(f"Errore inizializzazione OAuth: {e}")
+    st.stop()
 
 if st.button("🗑️ Cancella Cache & Rilogga"):
     if os.path.exists(cache_path):
