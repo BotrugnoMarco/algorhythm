@@ -218,15 +218,16 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         real_user_id = current_user["id"]
         
         # --- CREAZIONE PLAYLIST MANUALE (REQUESTS) ---
-        # Usiamo requests nudo e crudo come richiesto, evitando spotipy per la creazione.
+        # Usiamo requests nudo e crudo come richiesto.
         token_info = sp.auth_manager.cache_handler.get_cached_token()
         if not token_info:
                 raise Exception("Token mancante per creazione playlist manuale")
         
         access_token = token_info['access_token']
         
-        # URL per creare playlist: POST /users/{user_id}/playlists
-        endpoint = f"https://api.spotify.com/v1/users/{real_user_id}/playlists"
+        # FIX: Usiamo l'endpoint /me/playlists invece di /users/{id}/playlists
+        # Questo evita errori 403 se l'user_id non corrisponde esattamente a quello atteso dall'API
+        endpoint = "https://api.spotify.com/v1/me/playlists"
         
         headers = {
             "Authorization": f"Bearer {access_token}",
