@@ -202,34 +202,39 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         # Recuperiamo l'ID utente corrente
         current_user = sp.current_user()
         real_user_id = current_user["id"]
+        
+        print(f"DEBUG: Tentativo creazione playlist per {real_user_id}")
 
-        # TENTATIVO 1: Creazione PRIVATA (Preferita)
+        # TENTATIVO 1: Creazione "Pubblica" (Public=True)
+        # Molte app in dev mode falliscono con POST su playlist private.
+        # Proviamo prima quella pubblica che ha meno restrizioni.
         try:
+            new_pl = sp.user_playlist_create(
+                user=real_user_id,
+                name=name,
+                public=True,  # ININFLUENTE per molti account nuovi, ma importante per l'API
+                description=description
+            )
+            print(f"✅ Playlist creata (Pubblica): {new_pl['id']}")
+            return new_pl["id"]
+        except spotipy.SpotifyException as e:
+            print(f"⚠️ Creazione Pubblica fallita: {e}")
+            
+            # TENTATIVO 2: Creazione "Privata" (Public=False)
+            print("🔄 Ritento con playlist PRIVATA...")
             new_pl = sp.user_playlist_create(
                 user=real_user_id,
                 name=name,
                 public=False,
                 description=description
             )
+            print(f"✅ Playlist creata (Privata): {new_pl['id']}")
             return new_pl["id"]
-        except spotipy.SpotifyException as e:
-            # Se fallisce con 403, potrebbe essere un problema di permessi specifici per le private
-            if e.http_status == 403:
-                print("⚠️ Creazione playlist PRIVATA fallita (403). Tentativo con playlist PUBBLICA.")
-                # TENTATIVO 2: Creazione PUBBLICA (Fallback)
-                new_pl = sp.user_playlist_create(
-                    user=real_user_id,
-                    name=name,
-                    public=True,
-                    description=description
-                )
-                return new_pl["id"]
-            else:
-                raise e
 
     except Exception as e:
-        print(f"❌ ERRORE CREAZIONE PLAYLIST: {e}")
-        raise e
+        print(f"❌ ERRORE CREAZIONE PLAYLIST FATALE: {e}")
+        # Diamo un messaggio più chiaro all'utente
+        raise Exception(f"Impossibile creare la playlist. Verifica che l'utente '{real_user_id}' sia aggiunto nella Dashboard sviluppatori di Spotify. Errore originale: {e}")
     except spotipy.SpotifyException as e:
         print(f"❌ ERRORE SPOTIPY ({e.http_status}): {e.msg}")
         print(f"URL Richiesta: {e}")
