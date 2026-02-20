@@ -170,35 +170,23 @@ def get_or_create_playlist(sp: spotipy.Spotify,
             # Se fallisce, procedi con la logica standard (ignora l'ID rotto)
 
     # 2. Cerca tra le playlist esistenti dell'utente (per nome)
-    playlists = []
-    offset = 0
-    while True:
-        page = sp.current_user_playlists(limit=50, offset=offset)
-        playlists.extend(page["items"])
-        if page["next"] is None:
-            break
-        offset += 50
+    # MODIFICA TEMPORANEA DEBUG: SALTATA RICERCA PLAYLIST ESISTENTE
+    # Vogliamo forzare la creazione per testare i permessi
+    # playlists = []
+    # offset = 0
+    # while True:
+    #     page = sp.current_user_playlists(limit=50, offset=offset)
+    #     playlists.extend(page["items"])
+    #     if page["next"] is None:
+    #         break
+    #     offset += 50
 
-    for pl in playlists:
-        if pl["name"] == name:
-            # ── VALIDAZIONE PERMESSI (FIX PER ERRORE 403) ──
-            # Se la playlist esiste ma è stata creata da una vecchia App, controlliamo
-            # se possiamo SCRIVERE su di essa provando a svuotarla (replace_items con lista vuota).
-            try:
-                # Eseguiamo una scrittura "test" reale
-                sp.playlist_replace_items(pl["id"], [])
-                # Se passa, ripristiniamo anche la descrizione corretta
-                sp.playlist_change_details(pl["id"], description=description)
-                return pl["id"]
-            except spotipy.SpotifyException as e:
-                if e.http_status == 403:
-                    print(f"⚠️  Playlist '{name}' ({pl['id']}) trovata ma NON scrivibile (403). Creazione nuova istanza.")
-                    continue  # Ignora questa vecchia playlist e cercane un'altra o creane una nuova
-                else:
-                    # Se è un altro errore, lo solleviamo
-                    raise e
+    # for pl in playlists:
+    #     if pl["name"] == name:
+    #         # ... (CODICE ESISTENTE COMMENTATO) ...
+    #         pass 
 
-    # Non trovata (o non scrivibile) → crea
+    # Non trovata (o non scrivibile) → crea (FORZATA)
     try:
         # Recuperiamo l'ID utente corrente in modo sicuro
         current_user = sp.current_user()
@@ -207,21 +195,23 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         # DEBUG: Stampa info critiche per il debug del 403
         token_info = sp.auth_manager.get_cached_token()
         scopes_in_token = token_info.get("scope", "") if token_info else "NESSUN TOKEN"
-        print(f"\n--- DEBUG CREAZIONE PLAYLIST ---")
-        print(f"User ID target: '{real_user_id}' (Input originale: '{user_id}')")
-        print(f"Scopes nel token: {scopes_in_token}")
         
-        if "playlist-modify-private" not in scopes_in_token and not description:
-             print("⚠️ ATTENZIONE: Manca 'playlist-modify-private'. La creazione potrebbe fallire se public=False.")
+        # Usiamo st.write se siamo in streamlit per essere sicuri di vederlo
+        try:
+            import streamlit as st
+            st.warning(f"DEBUG: User={real_user_id}, Scopes={scopes_in_token}")
+        except:
+            print(f"DEBUG: User={real_user_id}, Scopes={scopes_in_token}")
 
         # Proviamo a creare la playlist
         new_pl = sp.user_playlist_create(
             user=real_user_id,
             name=name,
-            public=False, # Importante: richiede playlist-modify-private
+            public=True, # PROVIAMO PUBLIC=TRUE (spesso risolve il 403 iniziale)
             description=description
         )
-        print(f"✅ Playlist creata con successo: {new_pl['id']}")
+        # Se siamo qui, successo!
+        if 'st' in locals(): st.success(f"Playlist creata: {new_pl['id']}")
         return new_pl["id"]
     except spotipy.SpotifyException as e:
         print(f"❌ ERRORE SPOTIPY ({e.http_status}): {e.msg}")
