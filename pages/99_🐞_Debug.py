@@ -128,3 +128,45 @@ if st.button("🚀 CREA PLAYLIST ORA"):
         except Exception as e:
             status.update(label="❌ Errore Generico", state="error")
             st.exception(e)
+
+# --- NUOVO DEBUG RAPIDO ---
+import uuid
+
+st.divider()
+st.subheader("3. Test Rapido (Playlist Casuale)")
+st.caption("Questo test crea immediatamente una playlist vuota con nome casuale per verificare i permessi di scrittura (scope: playlist-modify-*).")
+
+if st.button("🎲 Crea Playlist Vuota Casuale"):
+    # Genera nome casuale
+    random_suffix = str(uuid.uuid4())[:8]
+    test_name = f"DEBUG_TEST_{random_suffix}"
+    
+    with st.status(f"Tentativo creazione playlist '{test_name}'...", expanded=True) as status:
+        try:
+            # 1. Recupera user corrente
+            current_user = sp.current_user()
+            user_id = current_user["id"]
+            st.write(f"Utente: `{user_id}`")
+            
+            # 2. Chiamata API
+            st.write("Invio richiesta a Spotify...")
+            res = sp.user_playlist_create(
+                user=user_id,
+                name=test_name,
+                public=False, # Privata di default per sicurezza
+                description=f"Playlist di test generata casualmente il {str(uuid.uuid4())}"
+            )
+            
+            # 3. Risultato
+            st.json(res)
+            
+            playlist_url = res.get("external_urls", {}).get("spotify")
+            if playlist_url:
+                st.link_button("🔗 Apri Playlist Creata", playlist_url)
+                
+            status.update(label="✅ Successo! Permessi di scrittura confermati.", state="complete")
+            st.balloons()
+            
+        except Exception as e:
+            st.error(f"❌ Errore durante la creazione: {e}")
+            status.update(label="❌ Fallito", state="error")
