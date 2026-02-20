@@ -286,9 +286,10 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
     # - Se track_uris ha elementi -> Il primo chunk lo inseriamo con PUT (che sostituisce/svuota il resto)
     # - I successivi chunk con POST (append)
     
+    endpoint_replace = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+
     if not track_uris:
         # Caso: Svuota playlist
-        endpoint_replace = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
         resp = requests.put(endpoint_replace, headers=headers, json={"uris": []})
         if resp.status_code not in [200, 201]:
              logger.error(f"Errore svuotamento playlist: {resp.status_code} {resp.text}")
@@ -296,21 +297,21 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
 
     # -- 2. Loop sui chunk
     
-    endpoint = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
-    
     # PULIZIA ESPLICITA INIZIALE
     # Tentiamo di svuotare solo se necessario. Se fallisce con 403 (comune su nuove playlist vuote), ignoriamo.
     logger.info(f"Tentativo svuotamento playlist {playlist_id}...")
     try:
-        # Usiamo PUT per svuotare. Alcuni utenti segnalano che PUT fallisce se la playlist è nuova.
-        # Proviamo a non considerarlo errore fatale.
-        resp_clear = requests.put(endpoint, headers=headers, json={"uris": []})
+        # Usiamo PUT su /tracks per svuotare (REPLACE).
+        resp_clear = requests.put(endpoint_replace, headers=headers, json={"uris": []})
         if resp_clear.status_code not in [200, 201]:
             logger.warning(f"Svuotamento PUT completato con status {resp_clear.status_code}. Msg: {resp_clear.text}")
     except Exception as e:
         logger.warning(f"Eccezione durante svuotamento (ignorata): {e}")
 
     # AGGIUNTA TRAMITE POST (APPEND) PER TUTTI I CHUNK
+    # Endpoint richiesto: POST /playlists/{playlist_id}/items
+    endpoint_add = f"https://api.spotify.com/v1/playlists/{playlist_id}/items"
+
     if not track_uris:
         logger.warning(f"Nessuna traccia da aggiungere alla playlist {playlist_id}")
         return
@@ -332,7 +333,7 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
         logger.info(f"Adding tracks (POST/APPEND) to playlist {playlist_id} (chunk {i//chunk_size + 1}) - {len(valid_chunk)} tracks")
         
         try:
-            resp = requests.post(endpoint, headers=headers, json=payload)
+            resp = requests.post(endpoint_add, headers=headers, json=payload)
             
             # --- AGGIUNTA TENTATIVO RETRY 403 ---
             if resp.status_code == 403:
@@ -342,7 +343,7 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
                 # Aspettiamo un attimo e riproviamo 1 volta.
                 import time
                 time.sleep(2)
-                resp = requests.post(endpoint, headers=headers, json=payload)
+                resp = requests.post(endpoint_add, headers=headers, json=payload)
             # ------------------------------------
 
             if resp.status_code not in [200, 201]:
