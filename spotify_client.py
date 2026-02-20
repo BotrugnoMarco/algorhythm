@@ -200,31 +200,36 @@ def get_or_create_playlist(sp: spotipy.Spotify,
 
     # Non trovata (o non scrivibile) → crea
     try:
-        # Se usiamo il metodo moderno, non serve user_id
-        # Ma user_playlist_create lo richiede.
-        # Proviamo a REFRESHARE l'user id in ogni caso
-        real_user_id = sp.current_user()["id"]
-        print(f"DEBUG: Creazione playlist per REAL user_id='{real_user_id}' (passato: '{user_id}')")
+        # Recuperiamo l'ID utente corrente in modo sicuro
+        current_user = sp.current_user()
+        real_user_id = current_user["id"]
         
-        # FIX: Usa endpoint specifico user_playlist_create con user id esplicito
-        # Se fallisce ancora, potrebbe essere un problema di scopes, proviamo a loggare gli scopes attuali
-        try:
-            current_token = sp.auth_manager.get_cached_token()
-            if current_token:
-                print(f"DEBUG: Scopes attuali nel token: {current_token.get('scope')}")
-        except:
-            pass
+        # DEBUG: Stampa info critiche per il debug del 403
+        token_info = sp.auth_manager.get_cached_token()
+        scopes_in_token = token_info.get("scope", "") if token_info else "NESSUN TOKEN"
+        print(f"\n--- DEBUG CREAZIONE PLAYLIST ---")
+        print(f"User ID target: '{real_user_id}' (Input originale: '{user_id}')")
+        print(f"Scopes nel token: {scopes_in_token}")
+        
+        if "playlist-modify-private" not in scopes_in_token and not description:
+             print("⚠️ ATTENZIONE: Manca 'playlist-modify-private'. La creazione potrebbe fallire se public=False.")
 
+        # Proviamo a creare la playlist
         new_pl = sp.user_playlist_create(
             user=real_user_id,
             name=name,
-            public=False,
-            description=description,
+            public=False, # Importante: richiede playlist-modify-private
+            description=description
         )
+        print(f"✅ Playlist creata con successo: {new_pl['id']}")
         return new_pl["id"]
-    except Exception as e:
-        print(f"ERRORE CREAZIONE PLAYLIST: {e}")
+    except spotipy.SpotifyException as e:
+        print(f"❌ ERRORE SPOTIPY ({e.http_status}): {e.msg}")
+        print(f"URL Richiesta: {e}")
         # Rilancia eccezione per permettere all'app di intercettarla
+        raise e
+    except Exception as e:
+        print(f"❌ ERRORE GENERICO CREAZIONE PLAYLIST: {e}")
         raise e
 
 
