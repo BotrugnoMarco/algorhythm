@@ -115,6 +115,12 @@ token_info = auth_manager.get_cached_token()
 real_scopes = token_info.get("scope", "")
 st.info(f"Scopes Attivi nel Token: `{real_scopes}`")
 
+# Mostra Token di Accesso
+access_token = token_info.get("access_token", "N/A")
+st.subheader("🔑 Il tuo Access Token")
+st.warning("Copia questo token e provalo su Postman se la creazione playlist fallisce qui.")
+st.text_area("Access Token (Bearer)", value=access_token, height=100)
+
 missing = []
 for s in SCOPES.split():
     if s not in real_scopes:
