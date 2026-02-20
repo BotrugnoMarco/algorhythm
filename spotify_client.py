@@ -57,15 +57,24 @@ def get_auth_manager(cache_path: str = ".spotify_cache_v2") -> SpotifyOAuth:
 def get_spotify_client(auth_manager: SpotifyOAuth = None) -> spotipy.Spotify | None:
     """
     Restituisce un client Spotify se c'è un token valido in cache.
-    Altrimenti restituisce None.
+    Gestisce automaticamente il refresh del token se scaduto.
     """
     if auth_manager is None:
         auth_manager = get_auth_manager()
 
-    # Controlla se abbiamo un token valido salvato
-    if auth_manager.validate_token(auth_manager.cache_handler.get_cached_token()):
+    # Controlla se abbiamo un token (anche scaduto, il manager proverà a rinfrescarlo)
+    token_info = auth_manager.cache_handler.get_cached_token()
+    
+    if not token_info:
+        return None
+        
+    # validate_token rinfresca automaticamente se necessario e restituisce il nuovo token info
+    # Se restituisce qualcosa, vuol dire che siamo a posto
+    if auth_manager.validate_token(token_info):
+        logger.info("Token valido (o rinfrescato correttamente). Inizializzo client con Auth Manager.")
         return spotipy.Spotify(auth_manager=auth_manager)
     
+    logger.warning("Token non valido e impossibile da rinfrescare.")
     return None
 
 
@@ -208,6 +217,13 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         real_user_id = current_user["id"]
         
         # Tenta creazione
+        # NOTA: Alcuni utenti riportano problemi se si passa user_id esplicito che non matcha esattamente quello interno
+        # Spotipy user_playlist_create usa l'endpoint /users/{user}/playlists
+        
+        # PROVA DIRETTA SENZA ID UTENTE ESPLICITO (Usa l'endpoint /me/playlists se disponibile o hack)
+        # Spotipy non ha un metodo .me_playlist_create(), ma possiamo usare .user_playlist_create con l'ID corrente.
+        
+        logger.info(f"Tentativo creazione playlist standard per user: '{real_user_id}'")
         new_pl = sp.user_playlist_create(
             user=real_user_id,
             name=name,
@@ -216,21 +232,33 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         )
         logger.info(f"✅ Nuova playlist creata: {new_pl['name']} ({new_pl['id']})")
         
-        # Aggiorna la cache locale se fornita (così la prossima chiamata la trova!)
+        # Aggiorna la cache locale se fornita
         if existing_playlists_cache is not None:
              existing_playlists_cache.append(new_pl)
              
         return new_pl["id"]
 
+    except spotipy.SpotifyException as e:
+        logger.error(f"❌ ERRORE SPOTIPY CREAZIONE PLAYLIST: {e}")
+        # Se è un errore 403, proviamo una strategia alternativa spesso risolutiva:
+        # Passare user=None o user=sp.me()['id'] esplicitamente se diverso
+        if e.http_status == 403:
+             logger.warning("Probabile errore permessi o mismatch User ID. Ritento con user_playlist_create senza ID esplicito o Public=True...")
+             try:
+                # Tentativo 2: Playlist pubblica (a volte le private richiedono permessi diversi non concessi)
+                new_pl = sp.user_playlist_create(user=real_user_id, name=name, public=True, description=description)
+                logger.info(f"✅ Playlist PUBBLICA creata (Fallback): {new_pl['id']}")
+                if existing_playlists_cache is not None: existing_playlists_cache.append(new_pl)
+                return new_pl["id"]
+             except Exception as e2:
+                logger.error(f"❌ Fallito anche il fallback pubblico: {e2}")
+                raise e # Rilancia l'originale se fallisce tutto
+        raise e
+
     except Exception as e:
-        logger.error(f"Errore creazione playlist '{name}': {e}")
-        # Riprova Pubblica se fallisce (può capitare con certi account)
-        try:
-            new_pl = sp.user_playlist_create(user=real_user_id, name=name, public=True, description=description)
-            if existing_playlists_cache is not None: existing_playlists_cache.append(new_pl)
-            return new_pl["id"]
-        except Exception as e2:
-            raise e2
+        logger.critical(f"❌ ERRORE CREAZIONE PLAYLIST FATALE: {e}", exc_info=True)
+        # Diamo un messaggio più chiaro all'utente
+        raise Exception(f"Impossibile creare la playlist. User: '{real_user_id}'. Error: {e}")
 
 
 def add_tracks_to_playlist(sp: spotipy.Spotify,
