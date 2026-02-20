@@ -157,18 +157,25 @@ if st.button("🎲 Crea Playlist Vuota Casuale (Test Immediato)", type="primary"
             # 1. Recupera user corrente
             current_user = sp.current_user()
             user_id = current_user["id"]
-            st.write(f"Utente: `{user_id}`")
+            
+            # Parametri usati
+            params = {
+                "user": user_id,
+                "name": test_name,
+                "public": False,
+                "description": f"Playlist di test generata casualmente il {str(uuid.uuid4())}"
+            }
+            
+            st.markdown("### 📋 Parametri Richiesta")
+            st.write(f"**Endpoint target:** `Start creation for: {user_id}`")
+            st.json(params)
             
             # 2. Chiamata API
-            st.write("Invio richiesta a Spotify...")
-            res = sp.user_playlist_create(
-                user=user_id,
-                name=test_name,
-                public=False, # Privata di default per sicurezza
-                description=f"Playlist di test generata casualmente il {str(uuid.uuid4())}"
-            )
+            st.write("⏳ Invio richiesta a Spotify API...")
+            res = sp.user_playlist_create(**params)
             
             # 3. Risultato
+            st.markdown("### 📩 Risposta API")
             st.json(res)
             
             playlist_url = res.get("external_urls", {}).get("spotify")
