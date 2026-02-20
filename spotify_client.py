@@ -297,25 +297,29 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
         return
 
     # -- 2. Loop sui chunk
-    # Il primo chunk usa PUT (sovrascrive), gli altri POST (accoda)
+    
+    endpoint = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+    
+    # PULIZIA ESPLICITA INIZIALE
+    # Invece di fidarci del PUT con dati, svuotiamo prima esplicitamente.
+    # Questo risolve problemi dove il PUT con dati fallisce silenziosamente o parzialmente.
+    logger.info(f"Svuotamento playlist {playlist_id}...")
+    resp_clear = requests.put(endpoint, headers=headers, json={"uris": []})
+    if resp_clear.status_code not in [200, 201]:
+        logger.warning(f"Attenzione: Svuotamento non riuscito (potrebbe essere già vuota o errore): {resp_clear.status_code}")
+
+    # AGGIUNTA TRAMITE POST (APPEND) PER TUTTI I CHUNK
     for i in range(0, len(track_uris), chunk_size):
         chunk = track_uris[i : i + chunk_size]
-        is_first_chunk = (i == 0)
-        
-        endpoint = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
         
         payload = {"uris": chunk}
         
-        if is_first_chunk:
-            # PUT: Sostituisce l'intero contenuto della playlist con questo chunk
-            logger.info(f"Adding tracks (PUT/REPLACE) to playlist {playlist_id} (chunk {i//chunk_size + 1})")
-            resp = requests.put(endpoint, headers=headers, json=payload)
-        else:
-            # POST: Aggiunge in coda
-            logger.info(f"Adding tracks (POST/APPEND) to playlist {playlist_id} (chunk {i//chunk_size + 1})")
-            resp = requests.post(endpoint, headers=headers, json=payload)
+        logger.info(f"Adding tracks (POST/APPEND) to playlist {playlist_id} (chunk {i//chunk_size + 1}) - {len(chunk)} tracks")
+        resp = requests.post(endpoint, headers=headers, json=payload)
             
         if resp.status_code not in [200, 201]:
-             logger.error(f"Errore aggiunta tracce playlist: {resp.status_code} {resp.text}")
-             # Non interrompiamo necessariamente tutto, ma logghiamo
+             logger.error(f"Errore aggiunta tracce playlist: {resp.status_code} - {resp.text}")
+             raise Exception(f"Errore aggiunta tracce: {resp.status_code} - {resp.text}")
+        else:
+             logger.info(f"Chunk {i//chunk_size + 1} aggiunto con successo. Snapshot ID: {resp.json().get('snapshot_id')}")
 
