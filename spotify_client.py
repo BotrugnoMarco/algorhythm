@@ -6,9 +6,14 @@ di TUTTE le Liked Songs dell'utente (con paginazione).
 """
 
 import os
+import logging
 from dotenv import load_dotenv
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+
+# Configurazione logging locale
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 load_dotenv()
 
@@ -170,44 +175,52 @@ def get_or_create_playlist(sp: spotipy.Spotify,
     - Altrimenti cerca per nome. Se non esiste, la crea.
     """
     
+    logger.info(f"START get_or_create_playlist: name={name}, known_id={known_id}")
+    
     # 1. Se abbiamo un ID mappato manualmente dall'utente, usiamo quello
     if known_id:
         try:
             # Verifica che esista e sia accessibile
+            logger.debug(f"Verifica playlist nota: {known_id}")
             pl = sp.playlist(known_id)
             # Verifica permesso scrittura (provi a svuotare)
             sp.playlist_replace_items(known_id, [])
+            logger.info(f"Playlist nota {known_id} valida e scrivibile.")
             return known_id
         except spotipy.SpotifyException as e:
-            print(f"⚠️ Playlist mappata '{known_id}' non accessibile/scrivibile. Fallback su ricerca per nome.")
+            logger.warning(f"⚠️ Playlist mappata '{known_id}' non accessibile/scrivibile. Errore: {e}. Fallback su ricerca per nome.")
             # Se fallisce, procedi con la logica standard (ignora l'ID rotto)
 
     # 2. Cerca tra le playlist esistenti dell'utente (per nome)
     playlists = []
     offset = 0
     try:
+        logger.debug("Ricerca playlist esistenti...")
         while True:
             page = sp.current_user_playlists(limit=50, offset=offset)
             playlists.extend(page["items"])
             if page["next"] is None:
                 break
             offset += 50
+        logger.debug(f"Trovate {len(playlists)} playlist totali.")
     except Exception as e:
-        print(f"⚠️ Errore durante il recupero delle playlist esistenti: {e}")
+        logger.error(f"⚠️ Errore durante il recupero delle playlist esistenti: {e}")
 
     for pl in playlists:
         if pl["name"] == name:
             # ── VALIDAZIONE PERMESSI ──
             # Se la playlist esiste, controlliamo se possiamo scriverci
             try:
+                logger.debug(f"Trovata playlist '{name}' ({pl['id']}). Test scrittura...")
                 sp.playlist_change_details(pl["id"], description=description)
                 # Se non va in errore, usiamo questa
+                logger.info(f"Playlist esistente {pl['id']} valida e usabile.")
                 return pl["id"]
             except spotipy.SpotifyException as e:
+                logger.warning(f"Playlist trovata ma errore {e.http_status} in scrittura. Msg: {e.msg}")
                 if e.http_status == 403:
-                    print(f"⚠️ Playlist '{name}' trovata ma non modificabile. Ne verrà creata una nuova.")
+                    logger.warning(f"⚠️ Playlist '{name}' trovata ma non modificabile (403). Ne verrà creata una nuova.")
                     continue
-                # Altri errori non bloccanti per la ricerca, ma strani
                 pass
 
     # Non trovata (o non scrivibile) → crea
@@ -216,38 +229,44 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         current_user = sp.current_user()
         real_user_id = current_user["id"]
         
-        print(f"DEBUG: Tentativo creazione playlist per {real_user_id}")
+        # LOGGING AVANZATO PER DEBUG 403
+        token_info = sp.auth_manager.get_cached_token()
+        scopes = token_info.get("scope", "UNKNOWN") if token_info else "NO TOKEN"
+        logger.info(f"DEBUG AUTH - User: {real_user_id} | Scopes: {scopes}")
 
-        # TENTATIVO 1: Creazione "Pubblica" (Public=True)
-        # Molte app in dev mode falliscono con POST su playlist private.
-        # Proviamo prima quella pubblica che ha meno restrizioni.
+        # TENTATIVO 1: Creazione PRIVATA (Preferita)
         try:
-            new_pl = sp.user_playlist_create(
-                user=real_user_id,
-                name=name,
-                public=True,  # ININFLUENTE per molti account nuovi, ma importante per l'API
-                description=description
-            )
-            print(f"✅ Playlist creata (Pubblica): {new_pl['id']}")
-            return new_pl["id"]
-        except spotipy.SpotifyException as e:
-            print(f"⚠️ Creazione Pubblica fallita: {e}")
-            
-            # TENTATIVO 2: Creazione "Privata" (Public=False)
-            print("🔄 Ritento con playlist PRIVATA...")
+            logger.info("Tentativo creazione playlist PRIVATA (public=False)...")
             new_pl = sp.user_playlist_create(
                 user=real_user_id,
                 name=name,
                 public=False,
                 description=description
             )
-            print(f"✅ Playlist creata (Privata): {new_pl['id']}")
+            logger.info(f"✅ Playlist PRIVATA creata: {new_pl['id']}")
             return new_pl["id"]
+        except spotipy.SpotifyException as e:
+            logger.error(f"Errore creazione PRIVATA: {e}")
+            
+            # Se fallisce con 403, potrebbe essere un problema di permessi specifici per le private
+            if e.http_status == 403:
+                logger.warning("⚠️ Creazione playlist PRIVATA fallita (403). Tentativo con playlist PUBBLICA.")
+                # TENTATIVO 2: Creazione PUBBLICA (Fallback)
+                new_pl = sp.user_playlist_create(
+                    user=real_user_id,
+                    name=name,
+                    public=True,
+                    description=description
+                )
+                logger.info(f"✅ Playlist PUBBLICA creata: {new_pl['id']}")
+                return new_pl["id"]
+            else:
+                raise e
 
     except Exception as e:
-        print(f"❌ ERRORE CREAZIONE PLAYLIST FATALE: {e}")
+        logger.critical(f"❌ ERRORE CREAZIONE PLAYLIST FATALE: {e}", exc_info=True)
         # Diamo un messaggio più chiaro all'utente
-        raise Exception(f"Impossibile creare la playlist. Verifica che l'utente '{real_user_id}' sia aggiunto nella Dashboard sviluppatori di Spotify. Errore originale: {e}")
+        raise Exception(f"Impossibile creare la playlist. Verifica log app.log per dettagli. User: '{real_user_id}'. Error: {e}")
     except spotipy.SpotifyException as e:
         print(f"❌ ERRORE SPOTIPY ({e.http_status}): {e.msg}")
         print(f"URL Richiesta: {e}")

@@ -15,10 +15,14 @@ from spotipy.exceptions import SpotifyException
 
 # Configurazione Logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("app.log", mode='a', encoding='utf-8')
+    ]
 )
+logger = logging.getLogger(__name__)
 
 # ── Import Shared Logic from local modules or libs ──
 from spotify_client import (
