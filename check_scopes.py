@@ -8,15 +8,15 @@ load_dotenv()
 
 SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-read-email ugc-image-upload"
 
-def check_token_scopes():
-    print(f"Checking token in cache file: .spotify_cache")
+def check_token_scopes(cache_path=".spotify_cache_v2"):
+    print(f"Checking token in cache file: {cache_path}")
     
-    if not os.path.exists(".spotify_cache"):
-        print("❌ No cache file found at .spotify_cache")
+    if not os.path.exists(cache_path):
+        print(f"❌ No cache file found at {cache_path}")
         return
 
     # Load the raw token from the cache file
-    with open(".spotify_cache") as f:
+    with open(cache_path) as f:
         token_info = json.load(f)
 
     print(f"Token info found for scope: {token_info.get('scope')}")

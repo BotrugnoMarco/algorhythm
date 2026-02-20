@@ -36,7 +36,30 @@ SCOPES = "user-library-read playlist-read-private playlist-read-collaborative pl
 st.text_area("Scopes Richiesti", SCOPES, height=70, disabled=True)
 
 st.write("---")
-st.write("Debug: Verifica inizializzazione OAuth...")
+st.subheader("🧪 Test Diretto con Token Manuale")
+st.info("Incolla qui il token che hai verificato su Postman per vedere se spotipy riesce a usarlo.")
+
+manual_token = st.text_input("Access Token (Bearer)", type="password")
+
+if st.button("Testa Chiamata con Token Manuale"):
+    if not manual_token:
+        st.error("Inserisci un token.")
+    else:
+        try:
+            # Inizializza spotipy direttamente con il token, bypassando il manager OAuth
+            sp_manual = spotipy.Spotify(auth=manual_token)
+            
+            st.write("Tentativo di chiamata `current_user()`...")
+            user_data = sp_manual.current_user()
+            st.success(f"✅ Funziona! Utente connesso: **{user_data.get('display_name')}** ({user_data.get('id')})")
+            st.json(user_data)
+            
+        except Exception as e:
+            st.error(f"❌ Errore anche con il token manuale: {e}")
+            st.write("Dettagli eccezione:", e)
+            
+st.write("---")
+st.write("Debug: Verifica inizializzazione OAuth Automatico...")
 
 # 2. Gestione Autenticazione
 # NOTA: Usiamo la stessa cache dell'app principale (.spotify_cache_v2) così se il redirect
