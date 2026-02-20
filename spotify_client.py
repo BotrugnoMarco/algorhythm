@@ -223,11 +223,11 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         # PROVA DIRETTA SENZA ID UTENTE ESPLICITO (Usa l'endpoint /me/playlists se disponibile o hack)
         # Spotipy non ha un metodo .me_playlist_create(), ma possiamo usare .user_playlist_create con l'ID corrente.
         
-        logger.info(f"Tentativo creazione playlist standard per user: '{real_user_id}'")
+        logger.info(f"Tentativo creazione playlist PUBBLICA per user: '{real_user_id}'")
         new_pl = sp.user_playlist_create(
             user=real_user_id,
             name=name,
-            public=False, # Default privata
+            public=True, # FORZIAMO PUBBLICA SU RICHIESTA UTENTE
             description=description
         )
         logger.info(f"✅ Nuova playlist creata: {new_pl['name']} ({new_pl['id']})")
@@ -240,19 +240,6 @@ def get_or_create_playlist(sp: spotipy.Spotify,
 
     except spotipy.SpotifyException as e:
         logger.error(f"❌ ERRORE SPOTIPY CREAZIONE PLAYLIST: {e}")
-        # Se è un errore 403, proviamo una strategia alternativa spesso risolutiva:
-        # Passare user=None o user=sp.me()['id'] esplicitamente se diverso
-        if e.http_status == 403:
-             logger.warning("Probabile errore permessi o mismatch User ID. Ritento con user_playlist_create senza ID esplicito o Public=True...")
-             try:
-                # Tentativo 2: Playlist pubblica (a volte le private richiedono permessi diversi non concessi)
-                new_pl = sp.user_playlist_create(user=real_user_id, name=name, public=True, description=description)
-                logger.info(f"✅ Playlist PUBBLICA creata (Fallback): {new_pl['id']}")
-                if existing_playlists_cache is not None: existing_playlists_cache.append(new_pl)
-                return new_pl["id"]
-             except Exception as e2:
-                logger.error(f"❌ Fallito anche il fallback pubblico: {e2}")
-                raise e # Rilancia l'originale se fallisce tutto
         raise e
 
     except Exception as e:
