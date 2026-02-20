@@ -1,14 +1,4 @@
-"""
-debug_spotify_auth.py
-─────────────────────
-Script diagnostico super-minimale per testare:
-1. Autenticazione OAuth2
-2. Scope effettivamente garantiti
-3. Creazione playlist di test
-
-Usa: .env
-"""
-
+# debug_spotify_auth.py
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -16,71 +6,51 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Verifica variabili
-print("\n🔍 VERIFICA ENV")
-print(f"CLIENT_ID: {'✅ TROVATO' if os.getenv('SPOTIPY_CLIENT_ID') else '❌ MANCANTE'}")
-print(f"CLIENT_SECRET: {'✅ TROVATO' if os.getenv('SPOTIPY_CLIENT_SECRET') else '❌ MANCANTE'}")
-print(f"REDIRECT_URI: {os.getenv('SPOTIPY_REDIRECT_URI')}")
+# COPIA ESATTA DEGLI SCOPE usati nell'app principale
+SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-read-email ugc-image-upload"
 
-SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-read-email"
+print("--- DEBUG SCRIPT SPOTIFY 403 ---")
+print(f"Client ID: {os.getenv('SPOTIPY_CLIENT_ID')[:4]}********")
+print(f"Redirect URI: {os.getenv('SPOTIPY_REDIRECT_URI')}")
+print(f"Cache Path: .spotify_cache_v2 (come nell'app)")
+print("-" * 30)
 
-def run_test():
-    try:
-        # Usa file di cache DIVERSO dall'app principale per non fare confusione
-        cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=".debug_cache")
-        
-        sp_oauth = SpotifyOAuth(
-            scope=SCOPES,
-            cache_handler=cache_handler,
-            show_dialog=True,  # FORZA il login dialog
-            open_browser=False # IMPORTANTE su server
-        )
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+    scope=SCOPES,
+    cache_path=".spotify_cache_v2",  # IMPORTANTE: usa la stessa cache pulita creata prima
+    open_browser=True # Nel terminale possiamo permetterci di aprire il browser se serve
+))
 
-        print("\n🔑 AUTENTICAZIONE START")
-        
-        # Se non c'è token valido, chiediamo il link
-        token_info = sp_oauth.validate_token(cache_handler.get_cached_token())
-        
-        if not token_info:
-            auth_url = sp_oauth.get_authorize_url()
-            print(f"\n⚠️  TOKEN MANCANTE/SCADUTO. Apri questo link nel browser:\n\n{auth_url}\n")
-            code = input("Incolla qui l'URL di redirect (o solo il codice 'code=...'): ").strip()
-            
-            # Estrai codice se incollato url intero
-            if "code=" in code:
-                code = code.split("code=")[1].split("&")[0]
-            
-            token_info = sp_oauth.get_access_token(code)
-            print("\n✅ Token ottenuto!")
-
-        sp = spotipy.Spotify(auth=token_info['access_token'])
-        user = sp.current_user()
-        print(f"\n👤 UTENTE: {user['id']} ({user['display_name']})")
-        print(f"📧 EMAIL: {user.get('email', 'N/A')}")
-        print(f"🛡️  SCOPE OTTENUTI: {token_info['scope']}")
-
-        print("\n🛠️  TEST CREAZIONE PLAYLIST...")
-        pl_name = f"Test Debug {os.urandom(2).hex()}"
-        
-        try:
-            pl = sp.user_playlist_create(
-                user=user['id'],
-                name=pl_name,
-                public=False,
-                description="Creato da debug script"
-            )
-            print(f"✅ SUCCESSO! Playlist creata: {pl['name']} (ID: {pl['id']})")
-            print("   (La elimino subito per pulizia...)")
-            sp.current_user_unfollow_playlist(pl['id'])
-            print("   (Eliminata/Unfollowed)")
-            
-        except spotipy.SpotifyException as e:
-            print(f"\n❌ ERRORE CREAZIONE: {e}")
-            print(f"   Status Code: {e.http_status}")
-            print(f"   Msg: {e.msg}")
-            
-    except Exception as e:
-        print(f"\n💥 ERRORE CRITICO: {e}")
-
-if __name__ == "__main__":
-    run_test()
+try:
+    user_info = sp.current_user()
+    mio_id = user_info['id']
+    email_user = user_info.get('email', 'N/A')
+    
+    print(f"✅ Login ok!")
+    print(f"   TD: {mio_id}")
+    print(f"   Email: {email_user}")
+    
+    # Controlla gli scope reali del token
+    token_info = sp.auth_manager.get_cached_token()
+    scopes_token = token_info.get('scope', 'N/A')
+    print(f"   Scopes attivi: {scopes_token}")
+    
+    if "playlist-modify-private" not in scopes_token:
+        print("\n⚠️ ATTENZIONE: Manca lo scope 'playlist-modify-private' nel token!")
+    
+    print("\n⏳ Provo a creare una playlist privata 'TEST 403'...")
+    # Tenta creazione
+    res = sp.user_playlist_create(user=mio_id, name="TEST 403", public=False)
+    
+    print(f"🎉 PLAYLIST CREATA CON SUCCESSO! ID: {res['id']}")
+    print("Il problema 403 sembra RISOLTO a livello di API/Account.")
+    
+except spotipy.SpotifyException as e:
+    print(f"\n❌ ERRORE SPOTIPY {e.http_status}: {e.msg}")
+    if e.http_status == 403:
+        print("\nRIPROVA DA DASHBOARD:")
+        print(f"1. Vai su developer.spotify.com -> App -> User Management")
+        print(f"2. Aggiungi ESPLICITAMENTE l'utente: '{mio_id}' (e anche '{email_user}')")
+        print("3. Aspetta 1 minuto e riprova questo script.")
+except Exception as e:
+    print(f"\n❌ ERRORE GENERICO: {e}")
