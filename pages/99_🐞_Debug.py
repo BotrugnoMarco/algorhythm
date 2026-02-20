@@ -102,6 +102,8 @@ if missing:
 else:
     st.success("✅ Tutti gli scope necessari sono presenti.")
 
+st.success("✅ DEBUGGER PRONTO: Scorri in basso per i test.")
+
 # 3. Test Creazione Playlist
 st.divider()
 st.subheader("2. Test Creazione")
@@ -180,7 +182,11 @@ if st.button("🎲 Crea Playlist Vuota Casuale (Test Immediato)", type="primary"
             st.markdown("### 🔍 Dettagli Richiesta HTTP (Simulata)")
             st.code(f"POST {endpoint_url}", language="http")
             
-            with st.expander("Vedi Headers Completi (incluso Token)", expanded=False):
+            st.subheader("🔑 HEADER AUTHORIZATION (Reale)")
+            st.write("Questo è l'header esatto che Spotipy invierà. Il token parte qui:")
+            st.code(f"Authorization: Bearer {access_token}", language="http")
+            
+            with st.expander("Vedi Tutti gli Headers JSON", expanded=True):
                 st.json(headers)
             
             st.markdown("**Body JSON:**")
@@ -188,6 +194,20 @@ if st.button("🎲 Crea Playlist Vuota Casuale (Test Immediato)", type="primary"
             
             # 2. Chiamata API
             st.write("⏳ Invio richiesta a Spotify API tramite Spotipy...")
+            
+            st.info(f"""
+            **Chiamata sp.user_playlist_create() con:**
+            - user = `{user_id}`
+            - name = `{payload["name"]}`
+            - public = `{payload["public"]}`
+            - collaborative = `{payload["collaborative"]}`
+            - description = `{payload["description"]}`
+            
+            👉 **Nota sul Token:** Il token NON viene passato come argomento qui sopra. 
+            È gestito internamente dall'oggetto `sp` (istanziato con `auth_manager`) 
+            che lo inserisce automaticamente nell'header `Authorization` della richiesta HTTP.
+            """)
+
             # Usiamo kwargs espliciti per chiarezza, anche se spotipy gestisce tutto
             res = sp.user_playlist_create(
                 user=user_id,
