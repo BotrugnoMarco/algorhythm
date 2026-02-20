@@ -8,7 +8,7 @@ load_dotenv()
 
 SCOPES = "user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-read-email ugc-image-upload"
 
-def check_token_scopes(cache_path=".spotify_cache_v2"):
+def check_token_scopes(cache_path=".spotify_cache"):
     print(f"Checking token in cache file: {cache_path}")
     
     if not os.path.exists(cache_path):

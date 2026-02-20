@@ -26,7 +26,7 @@ SPOTIFY_REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI",
                                   "http://localhost:8501")
 
 
-def get_auth_manager(cache_path: str = ".spotify_cache_v2") -> SpotifyOAuth:
+def get_auth_manager(cache_path: str = ".spotify_cache") -> SpotifyOAuth:
     """
     Crea e restituisce il gestore dell'autenticazione OAuth2.
     Configura open_browser=False per compatibilità server.

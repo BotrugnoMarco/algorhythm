@@ -64,16 +64,18 @@ st.write("Debug: Verifica inizializzazione OAuth Automatico...")
 # 2. Gestione Autenticazione
 # NOTA: Usiamo la stessa cache dell'app principale (.spotify_cache_v2) così se il redirect
 # finisce sulla Home (app.py) e lì avviene lo scambio del token, noi lo troviamo già pronto qui.
-cache_path = ".spotify_cache_v2"
+cache_path = ".spotify_cache" 
 
 try:
+    # IMPORTANTE: Configurazione identica a spotify_client.py
     auth_manager = SpotifyOAuth(
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri=redirect_uri,
         scope=SCOPES,
-        cache_path=cache_path,
-        show_dialog=True
+        cache_path=os.path.abspath(cache_path),
+        show_dialog=True,
+        open_browser=False
     )
     st.write("Debug: OAuth inizializzato correttamente.")
 except Exception as e:
