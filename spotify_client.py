@@ -178,8 +178,7 @@ def get_or_create_playlist(sp: spotipy.Spotify,
                            user_id: str,
                            name: str,
                            description: str = "",
-                           known_id: str = None,
-                           existing_playlists_cache: list[dict] = None) -> str:
+                           known_id: str = None) -> str:
     """
     Restituisce l'ID di una playlist.
     - Se known_id è fornito e valido, usa quello.
@@ -192,25 +191,23 @@ def get_or_create_playlist(sp: spotipy.Spotify,
     # 1. Se abbiamo un ID mappato manualmente dall'utente, usiamo quello
     if known_id:
         try:
-            # Verifica che esista e sia accessibile (leggera chiamata API, ma necessaria)
+            # Verifica che esista e sia accessibile
             sp.playlist(known_id, fields="id,owner,public")
             return known_id
         except Exception:
              logger.warning(f"Playlist nota {known_id} non valida. Ignorata.")
 
-    # 2. Otteniamo la lista delle playlist (da cache passata o fetch se manca)
-    if existing_playlists_cache is not None:
-        playlists = existing_playlists_cache
-    else:
-        # FALLBACK PERICOLOSO: Se non passiamo la cache, scarica tutto (LENTO e RISCHIOSO PER RATE LIMIT)
-        logger.warning("⚠️ Cache playlist non fornita a get_or_create_playlist! Scarico tutte le playlist...")
-        playlists = get_all_user_playlists(sp)
+    # 2. Otteniamo SEMPRE la lista fresca delle playlist
+    # Ignoriamo la cache passata per evitare inconsistenze
+    logger.info("Scaricamento fresco di tutte le playlist utente...")
+    playlists = get_all_user_playlists(sp)
 
-    # 3. Cerca tra le playlist (in memoria)
+    # 3. Cerca tra le playlist
     for pl in playlists:
         if pl["name"] == name:
-            logger.info(f"Playlist trovata in cache: {pl['name']} ({pl['id']})")
+            logger.info(f"Playlist trovata: {pl['name']} ({pl['id']})")
             return pl["id"]
+
 
     # 4. Se non trovata, CREA
     try:
@@ -251,8 +248,6 @@ def get_or_create_playlist(sp: spotipy.Spotify,
             res_json = response.json()
             logger.info(f"✅ Playlist creata manualmente! ID: {res_json['id']}")
             
-            if existing_playlists_cache is not None:
-                    existing_playlists_cache.append(res_json)
             return res_json['id']
         else:
             logger.error(f"❌ Errore Creazione Manuale: {response.status_code} - {response.text}")
