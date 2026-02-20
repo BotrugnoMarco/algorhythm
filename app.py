@@ -108,7 +108,8 @@ def authenticate():
             
         try:
             # Scambia il codice e SALVA SU DISCO il token
-            auth_manager.get_access_token(code)
+            # as_dict=False evita il DeprecationWarning, tanto il token viene salvato in cache
+            auth_manager.get_access_token(code, as_dict=False)
             
             # Pulisci URL e ricarica
             st.query_params.clear()
