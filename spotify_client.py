@@ -217,73 +217,42 @@ def get_or_create_playlist(sp: spotipy.Spotify,
         current_user = sp.current_user()
         real_user_id = current_user["id"]
         
-        # Tenta creazione
-        # NOTA: Alcuni utenti riportano problemi se si passa user_id esplicito che non matcha esattamente quello interno
-        # Spotipy user_playlist_create usa l'endpoint /users/{user}/playlists
+        # --- CREAZIONE PLAYLIST MANUALE (REQUESTS) ---
+        # Usiamo requests nudo e crudo come richiesto, evitando spotipy per la creazione.
+        token_info = sp.auth_manager.cache_handler.get_cached_token()
+        if not token_info:
+                raise Exception("Token mancante per creazione playlist manuale")
         
-        # PROVA DIRETTA SENZA ID UTENTE ESPLICITO (Usa l'endpoint /me/playlists se disponibile o hack)
-        # Spotipy non ha un metodo .me_playlist_create(), ma possiamo usare .user_playlist_create con l'ID corrente.
+        access_token = token_info['access_token']
         
-        logger.info(f"Tentativo creazione playlist PUBBLICA per user: '{real_user_id}'")
-        new_pl = sp.user_playlist_create(
-            user=real_user_id,
-            name=name,
-            public=True, # FORZIAMO PUBBLICA SU RICHIESTA UTENTE
-            description=description
-        )
-        logger.info(f"✅ Nuova playlist creata: {new_pl['name']} ({new_pl['id']})")
+        # URL per creare playlist: POST /users/{user_id}/playlists
+        endpoint = f"https://api.spotify.com/v1/users/{real_user_id}/playlists"
         
-        # Aggiorna la cache locale se fornita
-        if existing_playlists_cache is not None:
-             existing_playlists_cache.append(new_pl)
-             
-        return new_pl["id"]
-
-    except Exception as e:
-        logger.error(f"❌ ERRORE SPOTIPY, TENTATIVO FALLBACK MANUALE (REQUESTS): {e}")
-
-        # --- FALLBACK MANUALE (Arma Finale) ---
-        # Se Spotipy fallisce, usiamo requests nudo e crudo come Postman
-        try:
-            token_info = sp.auth_manager.cache_handler.get_cached_token()
-            if not token_info:
-                 raise Exception("Token mancante per fallback manuale")
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "name": name,
+            "description": description,
+            "public": True # FORZIAMO PUBBLICA SU RICHIESTA UTENTE
+        }
+        
+        logger.info(f"REQUEST MANUALE: POST {endpoint} | Payload: {payload}")
+        
+        response = requests.post(endpoint, headers=headers, json=payload)
+        
+        if response.status_code in [200, 201]:
+            res_json = response.json()
+            logger.info(f"✅ Playlist creata manualmente! ID: {res_json['id']}")
             
-            access_token = token_info['access_token']
-            
-            # URL Costruito a mano
-            endpoint = f"https://api.spotify.com/v1/users/{real_user_id}/playlists"
-            
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "name": name,
-                "description": description,
-                "public": True # Manteniamo pubblica per sicurezza
-            }
-            
-            logger.info(f"FALLBACK REQUEST: POST {endpoint} | Payload: {payload}")
-            
-            response = requests.post(endpoint, headers=headers, json=payload)
-            
-            if response.status_code in [200, 201]:
-                res_json = response.json()
-                logger.info(f"✅ Playlist creata manualmente! ID: {res_json['id']}")
-                
-                if existing_playlists_cache is not None:
-                     existing_playlists_cache.append(res_json)
-                return res_json['id']
-            else:
-                logger.error(f"❌ Errore Fallback Manuale: {response.status_code} - {response.text}")
-                # Rilancia l'originale se fallisce anche questo
-                raise e 
-
-        except Exception as e_fallback:
-             logger.critical(f"❌ FALLIMENTO TOTALE (Anche manuale): {e_fallback}")
-             raise e
+            if existing_playlists_cache is not None:
+                    existing_playlists_cache.append(res_json)
+            return res_json['id']
+        else:
+            logger.error(f"❌ Errore Creazione Manuale: {response.status_code} - {response.text}")
+            raise Exception(f"Errore creazione playlist: {response.status_code} - {response.text}")
 
     except Exception as e:
         logger.critical(f"❌ ERRORE CREAZIONE PLAYLIST FATALE: {e}", exc_info=True)
@@ -297,18 +266,55 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
     """
     Sostituisce le tracce nella playlist (svuotandola prima),
     gestendo i blocchi da 100 tracce.
+    Usa REQUESTS manuali invece di spotipy per evitare problemi noti.
     """
     chunk_size = 100
     
-    # Se non ci sono tracce, svuotiamo e basta
+    # Recupera token per chiamate manuali
+    token_info = sp.auth_manager.cache_handler.get_cached_token()
+    if not token_info:
+         raise Exception("Token mancante per add_tracks_to_playlist")
+    
+    access_token = token_info['access_token']
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    # -- 1. Svuota la playlist (PUT con lista vuota o inizia col primo chunk)
+    # Strategia: 
+    # - Se track_uris è vuoto -> Svuota tutto (PUT [])
+    # - Se track_uris ha elementi -> Il primo chunk lo inseriamo con PUT (che sostituisce/svuota il resto)
+    # - I successivi chunk con POST (append)
+    
     if not track_uris:
-        sp.playlist_replace_items(playlist_id, [])
+        # Caso: Svuota playlist
+        endpoint_replace = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+        resp = requests.put(endpoint_replace, headers=headers, json={"uris": []})
+        if resp.status_code not in [200, 201]:
+             logger.error(f"Errore svuotamento playlist: {resp.status_code} {resp.text}")
         return
 
-    # Prima svuota SEMPRE la playlist per sicurezza
-    sp.playlist_replace_items(playlist_id, [])
-
-    # Poi aggiungi a blocchi di 100
+    # -- 2. Loop sui chunk
+    # Il primo chunk usa PUT (sovrascrive), gli altri POST (accoda)
     for i in range(0, len(track_uris), chunk_size):
         chunk = track_uris[i : i + chunk_size]
-        sp.playlist_add_items(playlist_id, chunk)
+        is_first_chunk = (i == 0)
+        
+        endpoint = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+        
+        payload = {"uris": chunk}
+        
+        if is_first_chunk:
+            # PUT: Sostituisce l'intero contenuto della playlist con questo chunk
+            logger.info(f"Adding tracks (PUT/REPLACE) to playlist {playlist_id} (chunk {i//chunk_size + 1})")
+            resp = requests.put(endpoint, headers=headers, json=payload)
+        else:
+            # POST: Aggiunge in coda
+            logger.info(f"Adding tracks (POST/APPEND) to playlist {playlist_id} (chunk {i//chunk_size + 1})")
+            resp = requests.post(endpoint, headers=headers, json=payload)
+            
+        if resp.status_code not in [200, 201]:
+             logger.error(f"Errore aggiunta tracce playlist: {resp.status_code} {resp.text}")
+             # Non interrompiamo necessariamente tutto, ma logghiamo
+
