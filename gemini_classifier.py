@@ -143,60 +143,73 @@ def _classify_batch(model: genai.GenerativeModel,
 
 # ── Public API ────────────────────────────────────────────────────────
 
-def classify_all_tracks(tracks: list[str], progress_callback=None):
+def classify_all_tracks(tracks: list, progress_callback=None):
     """
     Classifica una lista completa di brani "Artist - Title".
+    Accetta sia list[str] che list[dict] (oggetti traccia).
     Restituisce un GENERATORE che yielda (n_processati, totale, batch_results).
     Gestisce automaticamente salvataggio e ripresa (resume) tramite cache JSON.
     """
     model = _init_model()
     
-    # 1. Carica cache esistente
+    # 1. Normalizzazione Input (Estrae stringhe univoche)
+    # Crea una mappa o lista parallela di stringhe "Artist - Title"
+    labels_to_process = []
+    
+    if tracks and isinstance(tracks[0], dict):
+        # Caso input: list[dict]
+        for t in tracks:
+            lbl = t.get("label", "")
+            if not lbl:
+                lbl = f"{t.get('artist', 'Unknown')} - {t.get('name', 'Unknown')}"
+            labels_to_process.append(lbl)
+    else:
+        # Caso input: list[str]
+        labels_to_process = [str(t) for t in tracks]
+
+    # 2. Carica cache esistente
     full_cache = load_classification_cache()
     
-    # 2. Identifica brani da processare
-    to_process = [t for t in tracks if t not in full_cache]
+    # 3. Identifica brani mancanti (filtrando sulle stringhe)
+    # Usiamo un set per lookup veloce, ma manteniamo l'ordine della lista originale se serve (anche se qui basta processare i mancanti)
+    # Attenzione: labels_to_process può contenere duplicati? Meglio processare i valori unici mancanti.
+    unique_labels = sorted(list(set(labels_to_process))) # Ordina per stabilità
+    missing_labels = [lbl for lbl in unique_labels if lbl not in full_cache]
     
-    # Se abbiamo già tutto, yieldiamo subito il risultato finale
-    processed_count = len(tracks) - len(to_process)
-    total_count = len(tracks)
+    total_count = len(unique_labels)
+    processed_count = total_count - len(missing_labels)
     
-    # Yield iniziale (per UI feedback se già tutto fatto)
+    # Yield iniziale (stato cache)
     if processed_count > 0:
-         # Restituisce ciò che abbiamo già in cache relativo a queste tracce
-         existing_subset = {k: v for k, v in full_cache.items() if k in tracks}
+         existing_subset = {k: v for k, v in full_cache.items() if k in unique_labels}
          yield (processed_count, total_count, existing_subset)
     
-    if not to_process:
+    if not missing_labels:
         return
 
-    # 3. Batch processing dei mancanti
-    current_results = {} # Risultati di questa sessione
+    # 4. Batch processing dei mancanti
+    current_results = {} 
     
-    for i in range(0, len(to_process), BATCH_SIZE):
-        batch = to_process[i : i + BATCH_SIZE]
+    # Processiamo la lista di stringhe mancanti
+    for i in range(0, len(missing_labels), BATCH_SIZE):
+        batch = missing_labels[i : i + BATCH_SIZE]
         
         batch_results = {}
         try:
             batch_results = _classify_batch(model, batch)
         except Exception as e:
             logger.error(f"Errore critico nel batch {i}: {e}")
-            # In caso di errore API fatale, salviamo comunque quello che abbiamo fatto finora
             break
             
         if batch_results:
-            # Aggiorna cache locale e file
             full_cache.update(batch_results)
             save_classification_cache(full_cache)
-            
             current_results.update(batch_results)
         
         processed_now = processed_count + i + len(batch)
-        
-        # Yieldiamo lo stato corrente
         yield (processed_now, total_count, batch_results)
         
-        # Rate limit safety per Free Tier
-        time.sleep(2.0) # Aumentato leggermente per sicurezza
+        # Rate limit safety
+        time.sleep(2.0)
 
 
