@@ -24,7 +24,28 @@ MODEL_NAME = "models/gemini-1.5-flash"  # Aggiornato a 1.5-flash esplicito
 BATCH_SIZE = 15
 MAX_RETRIES = 3
 RETRY_DELAY = 5
+CLASSIFICATION_CACHE_FILE = "user_data/classification_cache.json"
 
+# ── Cache Management ───────────────────────────────────────────────────
+
+def load_classification_cache() -> dict[str, list[str]]:
+    """Carica la cache delle classificazioni."""
+    if os.path.exists(CLASSIFICATION_CACHE_FILE):
+        try:
+            with open(CLASSIFICATION_CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Errore caricamento cache: {e}")
+    return {}
+
+def save_classification_cache(cache: dict[str, list[str]]):
+    """Salva la cache delle classificazioni."""
+    os.makedirs(os.path.dirname(CLASSIFICATION_CACHE_FILE), exist_ok=True)
+    try:
+        with open(CLASSIFICATION_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Errore salvataggio cache: {e}")
 
 # ── Costruzione Prompt Dinamico ────────────────────────────────────────
 
@@ -122,31 +143,60 @@ def _classify_batch(model: genai.GenerativeModel,
 
 # ── Public API ────────────────────────────────────────────────────────
 
-def classify_all_tracks(tracks: list[str], progress_callback=None) -> dict[str, list[str]]:
+def classify_all_tracks(tracks: list[str], progress_callback=None):
     """
     Classifica una lista completa di brani "Artist - Title".
+    Restituisce un GENERATORE che yielda (n_processati, totale, batch_results).
+    Gestisce automaticamente salvataggio e ripresa (resume) tramite cache JSON.
     """
     model = _init_model()
-    results = {}
-    total = len(tracks)
     
-    # Batch processing
-    for i in range(0, total, BATCH_SIZE):
-        batch = tracks[i : i + BATCH_SIZE]
+    # 1. Carica cache esistente
+    full_cache = load_classification_cache()
+    
+    # 2. Identifica brani da processare
+    to_process = [t for t in tracks if t not in full_cache]
+    
+    # Se abbiamo già tutto, yieldiamo subito il risultato finale
+    processed_count = len(tracks) - len(to_process)
+    total_count = len(tracks)
+    
+    # Yield iniziale (per UI feedback se già tutto fatto)
+    if processed_count > 0:
+         # Restituisce ciò che abbiamo già in cache relativo a queste tracce
+         existing_subset = {k: v for k, v in full_cache.items() if k in tracks}
+         yield (processed_count, total_count, existing_subset)
+    
+    if not to_process:
+        return
+
+    # 3. Batch processing dei mancanti
+    current_results = {} # Risultati di questa sessione
+    
+    for i in range(0, len(to_process), BATCH_SIZE):
+        batch = to_process[i : i + BATCH_SIZE]
         
-        # Aggiorna progress bar
-        if progress_callback:
-            progress_callback(i, total)
+        batch_results = {}
+        try:
+            batch_results = _classify_batch(model, batch)
+        except Exception as e:
+            logger.error(f"Errore critico nel batch {i}: {e}")
+            # In caso di errore API fatale, salviamo comunque quello che abbiamo fatto finora
+            break
             
-        batch_results = _classify_batch(model, batch)
         if batch_results:
-            results.update(batch_results)
+            # Aggiorna cache locale e file
+            full_cache.update(batch_results)
+            save_classification_cache(full_cache)
+            
+            current_results.update(batch_results)
+        
+        processed_now = processed_count + i + len(batch)
+        
+        # Yieldiamo lo stato corrente
+        yield (processed_now, total_count, batch_results)
         
         # Rate limit safety per Free Tier
-        time.sleep(1.0)
-        
-    if progress_callback:
-        progress_callback(total, total)
-        
-    return results
+        time.sleep(2.0) # Aumentato leggermente per sicurezza
+
 
