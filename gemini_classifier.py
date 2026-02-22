@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "models/gemini-2.0-flash"  # Aggiornato a 2.0-flash
-BATCH_SIZE = 15
-MAX_RETRIES = 3
-RETRY_DELAY = 5
+MODEL_NAME = "models/gemini-2.0-flash" 
+BATCH_SIZE = 10  # Ridotto per stare nei limiti TPM
+MAX_RETRIES = 5  # Aumentato i tentativi
+RETRY_DELAY = 10 # Aumentato delay base
 CLASSIFICATION_CACHE_FILE = "user_data/classification_cache.json"
 
 # ── Cache Management ───────────────────────────────────────────────────
@@ -136,7 +136,14 @@ def _classify_batch(model: genai.GenerativeModel,
 
         except Exception as e:
             logger.warning(f"Batch fallito (tentativo {attempt}): {e}")
-            time.sleep(RETRY_DELAY)
+            
+            # Se è un errore 429 (Too Many Requests), aspettiamo esponenzialmente
+            if "429" in str(e):
+                wait_time = RETRY_DELAY * (2 ** (attempt - 1)) + 5 # Esponenziale: 10s, 25s, 55s...
+                logger.warning(f"Rate limit hit. Waiting {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                time.sleep(RETRY_DELAY)
     
     return track_map
 
@@ -210,6 +217,8 @@ def classify_all_tracks(tracks: list, progress_callback=None):
         yield (processed_now, total_count, batch_results)
         
         # Rate limit safety
-        time.sleep(2.0)
+        # Con Gemini Free Tier il limite è ~15 RPM (Request Per Minute).
+        # Dormire 4 secondi + overhead rete dovrebbe stare dentro i 15 RPM.
+        time.sleep(4.0)
 
 
