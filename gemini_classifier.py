@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "models/gemini-2.0-flash" 
-BATCH_SIZE = 10  # Ridotto per stare nei limiti TPM
-MAX_RETRIES = 5  # Aumentato i tentativi
-RETRY_DELAY = 10 # Aumentato delay base
+MODEL_NAME = "models/gemini-2.0-flash-lite" # Passiamo alla versione 'Lite' per meno carico
+BATCH_SIZE = 8   # Un po' più di respiro rispetto a 5
+MAX_RETRIES = 5
+RETRY_DELAY = 20
 CLASSIFICATION_CACHE_FILE = "user_data/classification_cache.json"
 
 # ── Cache Management ───────────────────────────────────────────────────
@@ -217,8 +217,8 @@ def classify_all_tracks(tracks: list, progress_callback=None):
         yield (processed_now, total_count, batch_results)
         
         # Rate limit safety
-        # Con Gemini Free Tier il limite è ~15 RPM (Request Per Minute).
-        # Dormire 4 secondi + overhead rete dovrebbe stare dentro i 15 RPM.
-        time.sleep(4.0)
+        # Con Gemini Free Tier il limite può essere molto stretto sui token al minuto.
+        # Dormiamo 10 secondi secchi tra un batch e l'altro.
+        time.sleep(10.0)
 
 
