@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "models/gemini-1.5-flash"  # Aggiornato a 1.5-flash esplicito
+MODEL_NAME = "gemini-1.5-flash"  # Aggiornato: rimosso prefisso 'models/'
 BATCH_SIZE = 15
 MAX_RETRIES = 3
 RETRY_DELAY = 5
