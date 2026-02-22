@@ -18,7 +18,7 @@ from spotify_client import (
     get_spotify_client,
     get_all_user_playlists
 )
-from gemini_classifier import classify_all_tracks
+from gemini_classifier import classify_all_tracks, load_classification_cache
 from classifier import (
     build_year_buckets,
     build_genre_buckets,
@@ -165,11 +165,50 @@ with tab1:
     st.markdown("### 🤖 Analisi AI dei Generi")
     st.write("Usa Gemini per analizzare il mood di ogni brano.")
     
-    if st.button("▶️ Avvia Analisi AI"):
-        st.info("Avvio processo classificazione...")
+    # ── STATISTICHE PRE-LANCIO (Resume UI) ──
+    # Carichiamo la cache per vedere a che punto siamo
+    try:
+        cached_data = load_classification_cache()
+    except:
+        cached_data = {}
+
+    # Calcoliamo quanti del totale (st.session_state.tracks) sono già in cache
+    total_tracks_count = len(tracks)
+    
+    # Costruiamo il set di stringhe "label" dai brani caricati
+    # NOTA: replichiamo la logica di gemini_classifier.py per coerenza
+    track_labels = []
+    for t in tracks:
+        lbl = t.get("label", "")
+        if not lbl:
+             lbl = f"{t.get('artist', 'Unknown')} - {t.get('name', 'Unknown')}"
+        track_labels.append(lbl)
+    
+    # Quanti ne ho già fatti?
+    completed_count = sum(1 for lbl in track_labels if lbl in cached_data)
+    remaining_count = total_tracks_count - completed_count
+    
+    # Mostriamo una Progress Bar "statica" dello stato attuale
+    if total_tracks_count > 0:
+        progress_val = completed_count / total_tracks_count
+        st.caption(f"Stato attuale: {completed_count} su {total_tracks_count} brani già analizzati ({int(progress_val*100)}%)")
+        st.progress(progress_val)
+    
+    # Testo pulsante dinamico
+    btn_label = "▶️ Avvia Analisi AI"
+    if completed_count > 0 and remaining_count > 0:
+        btn_label = f"⏯️ Riprendi Analisi (Mancano {remaining_count})"
+    elif completed_count == total_tracks_count and total_tracks_count > 0:
+        btn_label = "✅ Analisi Completata (Rilancia per forzare)"
+
+    if st.button(btn_label):
+        if remaining_count == 0:
+             st.info("Tutti i brani sono già stati analizzati! Ricarico i dati...")
+        else:
+             st.info(f"Avvio processo... Analizzerò i {remaining_count} brani mancanti.")
         
         container = st.container()
-        progress = st.progress(0)
+        progress = st.progress(0, text="Inizializzazione...")
         
         # Generator
         gen = classify_all_tracks(tracks)
