@@ -192,9 +192,13 @@ with tab1:
                     st.caption(f"Last batch: {txt}")
 
         except Exception as e:
-            st.error(f"Errore AI: {e}")
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                st.warning("⚠️ Hai raggiunto il limite API giornaliero di Google o Spotify.")
+                st.info("💡 Niente paura! I progressi sono stati salvati. Puoi chiudere tutto e riprendere domani esattamente da qui.")
+            else:
+                st.error(f"Errore AI: {e}", icon="🚨")
             
-        st.success("Analisi completata!")
+        st.success("Analisi interrotta o completata!")
         
         # Build buckets immediately
         st.session_state["genre_buckets"] = build_genre_buckets(tracks, current_class)

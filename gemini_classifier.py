@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "models/gemini-2.0-flash-lite" # Passiamo alla versione 'Lite' per meno carico
-BATCH_SIZE = 8   # Un po' più di respiro rispetto a 5
-MAX_RETRIES = 5
-RETRY_DELAY = 20
+MODEL_NAME = "models/gemini-1.5-flash" 
+BATCH_SIZE = 12  
+MAX_RETRIES = 3 # Riduciamo i retry ossessivi
+RETRY_DELAY = 10 
 CLASSIFICATION_CACHE_FILE = "user_data/classification_cache.json"
 
 # ── Cache Management ───────────────────────────────────────────────────
@@ -139,9 +139,14 @@ def _classify_batch(model: genai.GenerativeModel,
             
             # Se è un errore 429 (Too Many Requests), aspettiamo esponenzialmente
             if "429" in str(e):
-                wait_time = RETRY_DELAY * (2 ** (attempt - 1)) + 5 # Esponenziale: 10s, 25s, 55s...
-                logger.warning(f"Rate limit hit. Waiting {wait_time}s...")
-                time.sleep(wait_time)
+                logger.warning(f"Quota giornaliera o rate limit raggiunto. Interrompo batch.")
+                # Se becchiamo 429, è probabile che sia inutile insistere subito se è la quota giornaliera.
+                # Facciamo 1 tentativo lungo, poi basta.
+                if attempt < MAX_RETRIES:
+                    time.sleep(Retry_DELAY * 2)
+                    continue 
+                else:
+                    raise e # Rilanciamo l'errore per fermare il loop principale
             else:
                 time.sleep(RETRY_DELAY)
     
@@ -205,8 +210,15 @@ def classify_all_tracks(tracks: list, progress_callback=None):
         try:
             batch_results = _classify_batch(model, batch)
         except Exception as e:
-            logger.error(f"Errore critico nel batch {i}: {e}")
-            break
+            msg = str(e)
+            if "429" in msg or "Quota exceeded" in msg:
+                 logger.error(f"🛑 LIMITE RAGGIUNTO (Quota Giornaliera/Minuto): {e}")
+                 # Segnaliamo che dobbiamo fermarci COMPLEATAMENTE per ora
+                 break
+            else:
+                 logger.error(f"Errore critico nel batch {i}: {e}")
+                 # Altri errori (network, 500) potrebbero essere temporanei, ma per sicurezza break
+                 break
             
         if batch_results:
             full_cache.update(batch_results)
@@ -217,8 +229,7 @@ def classify_all_tracks(tracks: list, progress_callback=None):
         yield (processed_now, total_count, batch_results)
         
         # Rate limit safety
-        # Con Gemini Free Tier il limite può essere molto stretto sui token al minuto.
-        # Dormiamo 10 secondi secchi tra un batch e l'altro.
-        time.sleep(10.0)
+        # Torniamo a un valore ragionevole.
+        time.sleep(2.0)
 
 
