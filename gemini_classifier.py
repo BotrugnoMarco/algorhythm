@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "models/gemini-2.0-flash"  # Aggiornato a 2.0-flash (modello disponibile)
-BATCH_SIZE = 15
+MODEL_NAME = "models/gemini-flash-latest" # Usiamo l'alias generico che dovrebbe sempre esistere
+BATCH_SIZE = 12
 MAX_RETRIES = 3
-RETRY_DELAY = 5
+RETRY_DELAY = 10
 
 
 # ── Costruzione Prompt Dinamico ────────────────────────────────────────
