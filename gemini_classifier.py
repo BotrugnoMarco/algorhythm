@@ -20,32 +20,11 @@ logger = logging.getLogger(__name__)
 # ── Configurazione Gemini ──────────────────────────────────────────────
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "models/gemini-flash-latest" # Usiamo l'alias generico che dovrebbe sempre esistere
-BATCH_SIZE = 12
+MODEL_NAME = "models/gemini-1.5-flash"  # Aggiornato a 1.5-flash esplicito
+BATCH_SIZE = 15
 MAX_RETRIES = 3
-RETRY_DELAY = 10
-CLASSIFICATION_CACHE_FILE = "user_data/classification_cache.json"
+RETRY_DELAY = 5
 
-# ── Cache Management ───────────────────────────────────────────────────
-
-def load_classification_cache() -> dict[str, list[str]]:
-    """Carica la cache delle classificazioni."""
-    if os.path.exists(CLASSIFICATION_CACHE_FILE):
-        try:
-            with open(CLASSIFICATION_CACHE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Errore caricamento cache: {e}")
-    return {}
-
-def save_classification_cache(cache: dict[str, list[str]]):
-    """Salva la cache delle classificazioni."""
-    os.makedirs(os.path.dirname(CLASSIFICATION_CACHE_FILE), exist_ok=True)
-    try:
-        with open(CLASSIFICATION_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(cache, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        logger.error(f"Errore salvataggio cache: {e}")
 
 # ── Costruzione Prompt Dinamico ────────────────────────────────────────
 
@@ -136,100 +115,38 @@ def _classify_batch(model: genai.GenerativeModel,
 
         except Exception as e:
             logger.warning(f"Batch fallito (tentativo {attempt}): {e}")
-            
-            # Se è un errore 429 (Too Many Requests), aspettiamo esponenzialmente
-            if "429" in str(e):
-                logger.warning(f"Quota giornaliera o rate limit raggiunto. Interrompo batch.")
-                # Se becchiamo 429, è probabile che sia inutile insistere subito se è la quota giornaliera.
-                # Facciamo 1 tentativo lungo, poi basta.
-                if attempt < MAX_RETRIES:
-                    time.sleep(Retry_DELAY * 2)
-                    continue 
-                else:
-                    raise e # Rilanciamo l'errore per fermare il loop principale
-            else:
-                time.sleep(RETRY_DELAY)
+            time.sleep(RETRY_DELAY)
     
     return track_map
 
 
 # ── Public API ────────────────────────────────────────────────────────
 
-def classify_all_tracks(tracks: list, progress_callback=None):
+def classify_all_tracks(tracks: list[str], progress_callback=None) -> dict[str, list[str]]:
     """
     Classifica una lista completa di brani "Artist - Title".
-    Accetta sia list[str] che list[dict] (oggetti traccia).
-    Restituisce un GENERATORE che yielda (n_processati, totale, batch_results).
-    Gestisce automaticamente salvataggio e ripresa (resume) tramite cache JSON.
     """
     model = _init_model()
+    results = {}
+    total = len(tracks)
     
-    # 1. Normalizzazione Input (Estrae stringhe univoche)
-    # Crea una mappa o lista parallela di stringhe "Artist - Title"
-    labels_to_process = []
-    
-    if tracks and isinstance(tracks[0], dict):
-        # Caso input: list[dict]
-        for t in tracks:
-            lbl = t.get("label", "")
-            if not lbl:
-                lbl = f"{t.get('artist', 'Unknown')} - {t.get('name', 'Unknown')}"
-            labels_to_process.append(lbl)
-    else:
-        # Caso input: list[str]
-        labels_to_process = [str(t) for t in tracks]
-
-    # 2. Carica cache esistente
-    full_cache = load_classification_cache()
-    
-    # 3. Identifica brani mancanti (filtrando sulle stringhe)
-    # Usiamo un set per lookup veloce, ma manteniamo l'ordine della lista originale se serve (anche se qui basta processare i mancanti)
-    # Attenzione: labels_to_process può contenere duplicati? Meglio processare i valori unici mancanti.
-    unique_labels = sorted(list(set(labels_to_process))) # Ordina per stabilità
-    missing_labels = [lbl for lbl in unique_labels if lbl not in full_cache]
-    
-    total_count = len(unique_labels)
-    processed_count = total_count - len(missing_labels)
-    
-    # Yield iniziale (stato cache)
-    if processed_count > 0:
-         existing_subset = {k: v for k, v in full_cache.items() if k in unique_labels}
-         yield (processed_count, total_count, existing_subset)
-    
-    if not missing_labels:
-        return
-
-    # 4. Batch processing dei mancanti
-    current_results = {} 
-    
-    # Processiamo la lista di stringhe mancanti
-    for i in range(0, len(missing_labels), BATCH_SIZE):
-        batch = missing_labels[i : i + BATCH_SIZE]
+    # Batch processing
+    for i in range(0, total, BATCH_SIZE):
+        batch = tracks[i : i + BATCH_SIZE]
         
-        batch_results = {}
-        try:
-            batch_results = _classify_batch(model, batch)
-        except Exception as e:
-            msg = str(e)
-            if "429" in msg or "Quota exceeded" in msg:
-                 logger.error(f"🛑 LIMITE RAGGIUNTO (Quota Giornaliera/Minuto): {e}")
-                 # Segnaliamo che dobbiamo fermarci COMPLEATAMENTE per ora
-                 break
-            else:
-                 logger.error(f"Errore critico nel batch {i}: {e}")
-                 # Altri errori (network, 500) potrebbero essere temporanei, ma per sicurezza break
-                 break
+        # Aggiorna progress bar
+        if progress_callback:
+            progress_callback(i, total)
             
+        batch_results = _classify_batch(model, batch)
         if batch_results:
-            full_cache.update(batch_results)
-            save_classification_cache(full_cache)
-            current_results.update(batch_results)
+            results.update(batch_results)
         
-        processed_now = processed_count + i + len(batch)
-        yield (processed_now, total_count, batch_results)
+        # Rate limit safety per Free Tier
+        time.sleep(1.0)
         
-        # Rate limit safety
-        # Torniamo a un valore ragionevole.
-        time.sleep(2.0)
-
+    if progress_callback:
+        progress_callback(total, total)
+        
+    return results
 
