@@ -209,10 +209,23 @@ def get_or_create_playlist(sp: spotipy.Spotify,
     # 3. Cerca tra le playlist (in memoria)
     for pl in playlists:
         if pl["name"] == name:
-            logger.info(f"Playlist trovata in cache: {pl['name']} ({pl['id']})")
-            return pl["id"]
+            # Controllo se l'utente è proprietario o se la playlist è collaborativa
+            # Attenzione: pl['owner'] è un oggetto, potrebbe non avere 'id' se è molto scarno ma solitamente ce l'ha
+            pl_owner = pl.get('owner', {}).get('id')
+            
+            # Normalizzazione ID per confronto sicuro
+            is_owner = (str(pl_owner).strip() == str(user_id).strip())
+            is_collaborative = pl.get('collaborative', False)
+            
+            # Se siamo proprietari o è collaborativa, è quella giusta
+            if is_owner or is_collaborative:
+                logger.info(f"Playlist valida trovata: '{pl['name']}' (ID: {pl['id']}) | Owner: {pl_owner} | User: {user_id}")
+                return pl["id"]
+            else:
+                # Se il nome coincide ma NON siamo owner, probabilmente è una vecchia playlist pubblica o seguita
+                logger.warning(f"⚠️ Trovata playlist '{name}' (ID: {pl['id']}) ma l'owner è '{pl_owner}' (Tu sei '{user_id}'). LA IGNORO e ne cerco/creo una tua.")
 
-    # 4. Se non trovata, CREA
+    # 4. Se non trovata nulla di scrivibile, CREA una nuova playlist proprietaria
     try:
         current_user = sp.current_user()
         real_user_id = current_user["id"]
