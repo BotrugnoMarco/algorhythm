@@ -1,0 +1,10 @@
+.env
+.history
+.spotify_cache
+.spotify_cache_v2
+user_data/
+__pycache__/
+*.pyc
+*.pyo
+pages/99_*
+app_backup.py
