@@ -274,7 +274,24 @@ with tab1:
             except Exception as e:
                 st.warning(f"Impossibile salvare cache: {e}")
 
-            st.session_state["genre_buckets"] = build_genre_buckets(tracks, current_class)
+            new_buckets = build_genre_buckets(tracks, current_class)
+            st.session_state["genre_buckets"] = new_buckets
+
+            # Svuota / aggiorna la playlist "To Review" su Spotify
+            existing_playlists_map = st.session_state.get("user_playlists", {})
+            to_review_id = existing_playlists_map.get("⚠️ To Review")
+            if to_review_id:
+                try:
+                    remaining = new_buckets.get("⚠️ To Review", [])
+                    remaining_uris = [t["track_id"] for t in remaining]
+                    add_tracks_to_playlist(sp, to_review_id, remaining_uris)
+                    if remaining_uris:
+                        st.info(f"Playlist 'To Review' aggiornata: {len(remaining_uris)} brani rimasti.")
+                    else:
+                        st.success("✅ Playlist 'To Review' svuotata!")
+                except Exception as e:
+                    st.warning(f"Impossibile aggiornare 'To Review' su Spotify: {e}")
+
             st.rerun()
 
 
