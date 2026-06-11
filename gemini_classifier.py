@@ -122,31 +122,18 @@ def _classify_batch(model: genai.GenerativeModel,
 
 # ── Public API ────────────────────────────────────────────────────────
 
-def classify_all_tracks(tracks: list[str], progress_callback=None) -> dict[str, list[str]]:
+def classify_all_tracks(labels: list[str]):
     """
-    Classifica una lista completa di brani "Artist - Title".
+    Generator che classifica una lista di label "Artist - Title".
+    Yields (batch_num, total_batches, batch_results) per ogni batch.
     """
     model = _init_model()
-    results = {}
-    total = len(tracks)
-    
-    # Batch processing
-    for i in range(0, total, BATCH_SIZE):
-        batch = tracks[i : i + BATCH_SIZE]
-        
-        # Aggiorna progress bar
-        if progress_callback:
-            progress_callback(i, total)
-            
+    total = len(labels)
+    total_batches = max(1, (total + BATCH_SIZE - 1) // BATCH_SIZE)
+
+    for batch_num, i in enumerate(range(0, total, BATCH_SIZE), 1):
+        batch = labels[i : i + BATCH_SIZE]
         batch_results = _classify_batch(model, batch)
-        if batch_results:
-            results.update(batch_results)
-        
-        # Rate limit safety per Free Tier
+        yield batch_num, total_batches, batch_results
         time.sleep(1.0)
-        
-    if progress_callback:
-        progress_callback(total, total)
-        
-    return results
 

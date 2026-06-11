@@ -12,17 +12,23 @@ def render_sidebar():
             name = user.get("display_name", user["id"])
             st.markdown(f"👤 **{name}**")
             
+            if st.button("🔄 Aggiorna Libreria", use_container_width=True):
+                track_cache_path = f"user_data/tracks_{user['id']}.json"
+                if os.path.exists(track_cache_path):
+                    os.remove(track_cache_path)
+                st.session_state.pop("tracks", None)
+                st.session_state["force_refresh_tracks"] = True
+                st.rerun()
+
             if st.button("🚪 Logout / Reset Cache", use_container_width=True):
-                # Rimuovi file di cache token
                 if os.path.exists(".spotify_cache"): os.remove(".spotify_cache")
                 base_dir = os.path.dirname(os.path.abspath(__file__))
                 abs_cache_path = os.path.join(base_dir, ".spotify_cache")
                 if os.path.exists(abs_cache_path): os.remove(abs_cache_path)
 
-                # Rimuovi file di cache tracce
                 track_cache_path = f"user_data/tracks_{user['id']}.json"
                 if os.path.exists(track_cache_path): os.remove(track_cache_path)
-                
+
                 st.session_state.clear()
                 st.rerun()
 

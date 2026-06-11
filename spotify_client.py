@@ -327,6 +327,35 @@ def add_tracks_to_playlist(sp: spotipy.Spotify,
         sp.playlist_add_items(playlist_id, chunk)
 
 
+def add_missing_tracks_to_playlist(sp: spotipy.Spotify,
+                                   playlist_id: str,
+                                   track_uris: list[str]) -> int:
+    """
+    Aggiunge alla playlist solo i brani non già presenti.
+    Restituisce il numero di brani effettivamente aggiunti.
+    """
+    # Recupera tutti i brani già in playlist
+    existing_uris = set()
+    offset = 0
+    while True:
+        page = sp.playlist_items(playlist_id, limit=100, offset=offset)
+        for item in page["items"]:
+            track = item.get("track")
+            if track and track.get("uri"):
+                existing_uris.add(track["uri"])
+        if page["next"] is None:
+            break
+        offset += 100
+
+    missing = [uri for uri in track_uris if uri not in existing_uris]
+
+    chunk_size = 100
+    for i in range(0, len(missing), chunk_size):
+        sp.playlist_add_items(playlist_id, missing[i : i + chunk_size])
+
+    return len(missing)
+
+
 def append_tracks_to_playlist(sp: spotipy.Spotify,
                               playlist_id: str,
                               track_uris: list[str]) -> None:
