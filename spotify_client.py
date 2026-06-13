@@ -356,6 +356,27 @@ def add_missing_tracks_to_playlist(sp: spotipy.Spotify,
     return len(missing)
 
 
+def get_playlist_track_uris(sp: spotipy.Spotify, playlist_id: str) -> set[str]:
+    """
+    Restituisce il set di URI delle tracce in una playlist.
+    """
+    uris = set()
+    offset = 0
+    while True:
+        page = sp.playlist_items(
+            playlist_id, limit=100, offset=offset,
+            fields="items(track(uri)),next"
+        )
+        for item in page["items"]:
+            track = item.get("track")
+            if track and track.get("uri"):
+                uris.add(track["uri"])
+        if page["next"] is None:
+            break
+        offset += 100
+    return uris
+
+
 def append_tracks_to_playlist(sp: spotipy.Spotify,
                               playlist_id: str,
                               track_uris: list[str]) -> None:

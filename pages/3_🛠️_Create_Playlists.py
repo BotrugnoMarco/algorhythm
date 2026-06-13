@@ -15,6 +15,7 @@ from spotify_client import (
     get_or_create_playlist,
     add_tracks_to_playlist,
     add_missing_tracks_to_playlist,
+    get_playlist_track_uris,
     get_auth_manager,
     get_spotify_client,
     get_all_user_playlists
@@ -23,6 +24,7 @@ from gemini_classifier import classify_all_tracks
 from classifier import (
     build_year_buckets,
     build_genre_buckets,
+    classify_by_year,
     YEAR_PLAYLISTS,
     GENRE_PLAYLISTS,
 )
@@ -161,21 +163,27 @@ if "classifications" not in st.session_state or not st.session_state["classifica
         except Exception as e:
             st.warning(f"Impossibile caricare cache classificazione: {e}")
 
-tab1, tab2 = st.tabs(["1. Classificazione AI", "2. Creazione Su Spotify"])
+tab1, tab2, tab3 = st.tabs(["1. Classificazione AI", "2. Creazione Su Spotify", "3. Verifica & Ripara"])
 
 # TAB 1: CLASSIFICAZIONE
 with tab1:
     st.markdown("### 🤖 Analisi AI dei Generi")
     st.write("Usa Gemini per analizzare il mood di ogni brano.")
     
+    current_class = st.session_state.get("classifications", {})
+    classified_normalized = {k.strip().lower() for k in current_class}
+
+    def _is_classified(t):
+        label = t.get("label", f"{t.get('artist','')} - {t.get('name','')}")
+        return label in current_class or label.strip().lower() in classified_normalized
+
+    unclassified_preview = [t for t in tracks if not _is_classified(t)]
+    st.caption(f"📊 Totale: {len(tracks)} · In cache: {len(tracks) - len(unclassified_preview)} · Da classificare: {len(unclassified_preview)}")
+
     if st.button("▶️ Avvia Analisi AI"):
         current_class = st.session_state.get("classifications", {})
 
-        # Filtra solo i brani non ancora classificati
-        unclassified = [
-            t for t in tracks
-            if t.get("label", f"{t.get('artist','')} - {t.get('name','')}") not in current_class
-        ]
+        unclassified = [t for t in tracks if not _is_classified(t)]
 
         if not unclassified:
             st.success("✅ Tutti i brani sono già classificati!")
@@ -402,3 +410,150 @@ with tab2:
         st.dataframe(pd.DataFrame(hist), use_container_width=True)
     else:
         st.caption("Nessuna playlist creata finora.")
+
+
+# TAB 3: VERIFICA & RIPARA
+with tab3:
+    st.markdown("### 🔍 Verifica Assegnazione Brani")
+    st.write(
+        "Controlla quali brani preferiti non sono stati ancora aggiunti "
+        "ad almeno una playlist AlgoRhythm su Spotify, poi assegnali con un click."
+    )
+
+    # Assicura che user_playlists sia caricato
+    if "user_playlists" not in st.session_state:
+        try:
+            with st.spinner("Caricamento playlist utente..."):
+                user_pls = get_all_user_playlists(st.session_state["sp"])
+                st.session_state["user_playlists"] = {p["name"]: p["id"] for p in user_pls}
+        except Exception:
+            st.session_state["user_playlists"] = {}
+
+    existing_playlists_map = st.session_state["user_playlists"]
+
+    # Determina quali playlist AlgoRhythm esistono già su Spotify
+    all_algo_names = set(GENRE_PLAYLISTS) | set(YEAR_PLAYLISTS.keys())
+    algo_on_spotify = {
+        name: pid for name, pid in existing_playlists_map.items()
+        if name in all_algo_names
+    }
+
+    col_info1, col_info2 = st.columns(2)
+    with col_info1:
+        st.metric("Playlist AlgoRhythm su Spotify", len(algo_on_spotify))
+    with col_info2:
+        st.metric("Playlist AlgoRhythm attese", len(all_algo_names))
+
+    missing_pls = all_algo_names - set(algo_on_spotify.keys())
+    if missing_pls:
+        with st.expander(f"⚠️ Playlist non ancora create ({len(missing_pls)})", expanded=False):
+            for name in sorted(missing_pls):
+                st.caption(f"• {name}")
+
+    st.markdown("---")
+
+    if st.button("🔍 Analizza brani non assegnati", key="btn_check_unassigned"):
+        if not algo_on_spotify:
+            st.warning("Nessuna playlist AlgoRhythm trovata su Spotify. Crea prima le playlist nel Tab 2.")
+        else:
+            all_assigned_uris: set[str] = set()
+            progress_check = st.progress(0)
+            pl_items = list(algo_on_spotify.items())
+            total_pl = len(pl_items)
+
+            for i, (pl_name, pl_id) in enumerate(pl_items):
+                progress_check.progress((i + 1) / total_pl, text=f"Controllo: {pl_name}...")
+                try:
+                    uris = get_playlist_track_uris(sp, pl_id)
+                    all_assigned_uris.update(uris)
+                except Exception as e:
+                    st.warning(f"Impossibile leggere '{pl_name}': {e}")
+
+            progress_check.progress(1.0, text="Analisi completata!")
+
+            unassigned = [t for t in tracks if t["track_id"] not in all_assigned_uris]
+            st.session_state["unassigned_tracks"] = unassigned
+
+    # Mostra risultati analisi
+    unassigned_tracks = st.session_state.get("unassigned_tracks", None)
+
+    if unassigned_tracks is not None:
+        if not unassigned_tracks:
+            st.success("✅ Tutti i brani preferiti sono già in almeno una playlist AlgoRhythm!")
+        else:
+            st.warning(f"⚠️ **{len(unassigned_tracks)}** brani non sono in nessuna playlist AlgoRhythm.")
+
+            current_class = st.session_state.get("classifications", {})
+
+            def _fmt_cats(label):
+                cats = current_class.get(label, [])
+                if not cats:
+                    return "⚠️ To Review"
+                if isinstance(cats, list):
+                    return ", ".join(cats)
+                return str(cats)
+
+            df_unassigned = pd.DataFrame([{
+                "Artista": t.get("artist", ""),
+                "Brano": t.get("track_name", t.get("name", "")),
+                "Anno": t.get("release_year", ""),
+                "Playlist Anno": classify_by_year(t) or "—",
+                "Playlist Genere (AI)": _fmt_cats(t.get("label", "")),
+            } for t in unassigned_tracks])
+
+            st.dataframe(df_unassigned, use_container_width=True, hide_index=True, height=400)
+
+            st.markdown("---")
+            if st.button("🔧 Assegna i brani mancanti alle playlist corrette", key="btn_fix_unassigned"):
+                current_class = st.session_state.get("classifications", {})
+
+                # Costruisce mappa playlist_name -> [uri, ...]
+                to_add: dict[str, list[str]] = {}
+                for t in unassigned_tracks:
+                    uri = t["track_id"]
+                    label = t.get("label", f"{t.get('artist','')} - {t.get('name','')}")
+
+                    # Playlist Anno
+                    year_pl = classify_by_year(t)
+                    if year_pl:
+                        to_add.setdefault(year_pl, []).append(uri)
+
+                    # Playlist Genere
+                    cats = current_class.get(label, [])
+                    if not cats:
+                        to_add.setdefault("⚠️ To Review", []).append(uri)
+                    else:
+                        if isinstance(cats, str):
+                            cats = [cats]
+                        for cat in cats:
+                            to_add.setdefault(cat, []).append(uri)
+
+                existing_pl_list = [{"name": k, "id": v} for k, v in existing_playlists_map.items()]
+                progress_fix = st.progress(0)
+                total_fixed = 0
+                fix_items = list(to_add.items())
+
+                for i, (pl_name, uris) in enumerate(fix_items):
+                    progress_fix.progress((i + 1) / len(fix_items), text=f"Aggiorno: {pl_name}...")
+                    try:
+                        pl_id = existing_playlists_map.get(pl_name)
+                        if not pl_id:
+                            pl_id = get_or_create_playlist(
+                                sp, user_id, pl_name,
+                                description="Auto-generated by AlgoRhythm 🎵",
+                                existing_playlists_cache=existing_pl_list,
+                            )
+                            existing_playlists_map[pl_name] = pl_id
+                            st.session_state["user_playlists"] = existing_playlists_map
+
+                        added = add_missing_tracks_to_playlist(sp, pl_id, uris)
+                        total_fixed += added
+                    except Exception as e:
+                        st.warning(f"Errore su '{pl_name}': {e}")
+
+                st.success(f"✅ {total_fixed} brani assegnati alle playlist!")
+                st.session_state["unassigned_tracks"] = []
+                # Invalida cache playlist per riflettere le modifiche
+                if "user_playlists" in st.session_state:
+                    del st.session_state["user_playlists"]
+                st.rerun()
